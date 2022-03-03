@@ -1,0 +1,15 @@
+<header>
+<div class="f2 lh-copy b"><a href="/" class="bn dim normal gray">Loop Compiler</a></div>
+<nav>
+  <ul class="flex list pl0 bt bb b--moon-gray mb4">
+    <li class="pa2 pl0"><a class="bn dim" href="/">Home</a></li>
+    <!-- <li class="pa2">    <a class="bn dim" href="/blog/">Blog</a></li> -->
+  </ul>
+</nav>
+</header>
+
+  {{isdef notitle}}
+  {{else}}
+      {{isdef title}}<h1 class="f2 lh-title normal dark-gray">{{fill title}}</h1> {{end}}
+      {{isdef nodate}}{{else}}<div class="f5 lh-copy i gray">{{fill date}}</div>{{end}}
+  {{end}}
