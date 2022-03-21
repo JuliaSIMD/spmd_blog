@@ -1,5 +1,5 @@
 +++
-title = "Orthogonalize Loops"
+title = "Orthogonalize Indexes"
 hascode = true
 date = Date(2022, 3, 14)
 rss = "This post goes over the significance of unimodular matrices in the
@@ -10,8 +10,7 @@ context of loop optimizations"
 
 In a convolutional neural network, we are likely to have the following two
 pieces of code, calculating the forward pass, and then the revese pass for
-calculating the gradient with respect to `A` (we leave off the code for the
-reverse pass with respect to `B`, as it is not the focus of this blog post).
+calculating the gradient with respect to `A`.
 ```julia-repl
 julia> using OffsetArrays
 
@@ -39,13 +38,28 @@ julia> function convpullback!(_dA, _B, _dC)
     return dA
 end
 ```
-While the forward pass looks easy to optimize via register tiling, this is not
-the case for the pullback: the index into `dA` is dependent on all four loop
-induction variables, making it impossible to hoist these loads and stores.
+We left off the code for the reverse pass with respect to `B`, as it doesn't
+feature the problem this blog post focuses on solving: 
+```julia
+dA[m + i, n + j] += 
+```
 
-Can we apply a rotation to the loops to remove some of the dependencies, thereby
-allowing us to reduce the number of loads and stores?
-That is, can we produce a new set of loops that looks more like
+While the forward pass is easy to optimize via register tiling, this is not
+the case for the pullback: the index into `dA` is dependent on all four loop
+induction variables, making it impossible to hoist these loads and stores
+out of any loops, forcing us to reload and restore memory on every iteration,
+meaning it takes many times more CPU instructions to evaluate.
+
+I'll add a post detailing register tiling, but for now just note that asside from
+reducing the loads and stores to `dA` by factors equal to the loops they're 
+hoisted out of, it would also results in several times fewer loads from `B` and
+from `dC`, enabling code to start attaining significant fractions of peak flops.
+An order of magnitude difference in performance is often a fair ballpark for
+the benefit of register tiling.
+
+So, now the question that's the focus of this post: can we re-index the memory
+accesses so that `dA` is dependent on only two loops?
+That is, we want to produce a new set of loops that looks more like
 ```julia
 for w in W, x in X
     dAwx = dA[w, x]
@@ -55,12 +69,130 @@ for w in W, x in X
     dA[w, x] = dAwx
 end
 ```
-By being able to register tile, we can achieve an order of magnitude speed up.
+which would allow us to register tile. If we can, what are the new ranges
+`W`, `X`, `Y`, and `Z`, and what are the new indices into `B` and `dC`?
+Can we develop a general algorithm?
 
-So if we can, what are the new ranges `W`, `X`, `Y`, and `Z`, and what are the
-new indices into `B` and `dC`? Can we develop a general algorithm?
+Often, a human can look at a problem and reason their way to a solution without
+too much difficulty. While our goal is to create a general algorithm to remove
+the need for expert human intervention (especially to enable codegen tools like
+reverse diff on loops to be produce optimal code; it is an express goal that
+naive loops + an AD tool like [Enzyme](https://github.com/EnzymeAD/Enzyme) + the new LoopVectorization
+will achieve or best state of the art performance across a wide range of loops),
+I find this is a useful starting point for building an intuition of the problem,
+which in turn can help point to general algorithms.
 
+We want to set `w = m + i`, and `x = n + j`, thus `W` must iterate over the full
+range of values attained by `m + i`, i.e. `w = 0:M+N-2`, and `x = 0:N+J-2`.
+We may now naively try setting the indices of `B[i,j]` to `B[y,z]` and working
+through the implications; what would this imply about the indicesof `dC`, and
+about the ranges `Y` and `Z`?
 
+First, it's straightforward to find that we must have `dC[w-y, x-z]`, as
+`m = w - i = w - y`, and we can prove `n` similarly.
+
+For the bounds on `y`, note that `y = i`, and `0 <= i <= I-1`, thus
+`0 <= y <= I-1`. However, we also have that `0 <= m <= M-1`, therefore
+`0 <= w-y <= M-1`, which means `y <= w` and `y >= w - (M-1)`. Taking
+the intersection yields `max(0, w - (M-1)) <= y <= min(I-1, w)`.
+We can apply the same argument for `z` to produce the bounds
+`max(0, x - (N-1)) <= z <= min(J-1, x)`.
+
+To make this algorithmic, we represent the loop bounds via a system of
+inequalities:
+```julia
+[ 1  0  0  0    [ m         [ M-1
+ -1  0  0  0      n    .<=     0
+  0  1  0  0      i           N-1
+  0 -1  0  0      j ]          0
+  0  0  1  0                  I-1
+  0  0 -1  0                   0
+  0  0  0  1                  J-1
+  0  0  0 -1 ]                 0 ]
+# A * [m;n;i;j] <= b
+```
+and the indices with a matrix
+```julia
+[ 1 0 1 0   * [ m         [ m + i
+  0 1 0 1       n    .==    n + j
+  1 0 0 0       i           m
+  0 1 0 0       j ]         n
+  0 0 1 0                   i
+  0 0 0 1 ]                 j     ]
+
+# X * [m;n;i;j] == [index expressions...]
+```
+Letting the index matrix be `X`, we can then frame our objective as
+finding some invertible matrix `K` such that the first two rows of `X*K`
+are linearly independent single-element vectors, with `1` as the single element.
+We can permute the columns of `K` arbitrarily to simplify this to say `X*K`'s first
+two rows should be `hcat(I(2), 0)`.
+With this, we can insert $\textnf{I} = \textbf{KK}\^{-1}$ to apply the transform.
+This also defines our new loop induction variables
+$
+\textbf{K}^{-1}\begin{bmatrix}m\\n\\i\\j\end{bmatrix}=
+\begin{bmatrix}w\\x\\y\\z\end{bmatrix}
+$
+Define $\textbf{w}$ as our new vector of induction variables, we can also express
+our new loop inequalities simply as $\textbf{AK}^{-1}\textbf{v} <= \textbf{b}$.
+
+This means that all we have left to do is actually find the matrix $K$.
+As $K$ must be both an integer matrix and invertible, it is unimodular.
+As the first two rows of $\textbf{XK}$ correspond to the identity matrix,
+we know the first two rows of $X$ equal the first two rows of $\textbf{K}^{-1}$.
+
+From here, we realize that we can find such a matrix by modifying the algorithms
+typically used to bring matrices into reduced forms, such as reduced echelon form
+or the Hermite normal form. We can use column pivots and row additions (using 
+integer multipliers), as these preserve the determinant and maintain the status
+as an integer matrix).
+We diagonalize one row at a time. When we encounter a row we cannot diagonalize, that 
+means this index cannot produce a unimodular matrix in combination with the preceding
+indices, thus we reject it and move on to the next index. In this way our matrix $\textbf{K}^{-1}$
+can be a subset of up to `size(X,2)` rows of $\textbf{X}$, not just the first two.
+The important characteristics here are that it allows us to choose which indices to
+prioritize -- e.g. those that would enable register tiling -- while still simplifying/
+maintaining simplicity in some other indices.
+If we run out of rows of $\textbf{X}$, then the algorithm will still succeed, but then
+$\textbf{K}^{-1}$ will include rows not present in $\textbf{X}$.
+
+Inputting the loop bounds (as `0 <= i_0 <= M-1`, `0 <= i_1 <= N-1`, `0 <= i_2 <= O-1`,
+and `0 <= i_3 <= P-1`) and the indices, we get the output:
+```
+Loop 0 lower bounds:
+i_0 >= 0
+Loop 0 upper bounds:
+i_0 <=  ( M + O - 2 )
+Loop 1 lower bounds:
+i_1 >= 0
+Loop 1 upper bounds:
+i_1 <=  ( N + P - 2 )
+Loop 2 lower bounds:
+i_2 >=  ( - M + 1 )  + i_0
+i_2 >= 0
+Loop 2 upper bounds:
+i_2 <= i_0
+i_2 <=  ( O - 1 )
+Loop 3 lower bounds:
+i_3 >=  ( - N + 1 )  + i_1
+i_3 >= 0
+Loop 3 upper bounds:
+i_3 <= i_1
+i_3 <=  ( P - 1 )
+
+ArrayReference 0 (dim = 2): # dA[i_0, i_1]
+{ Induction Variable: 0 }
+ ( M + O - 1 )  * ({ Induction Variable: 1 })
+
+ArrayReference 1 (dim = 2): # B[i_2, i_3]
+{ Induction Variable: 2 }
+ ( O + 1 )  * ({ Induction Variable: 3 })
+
+ArrayReference 2 (dim = 2): # dC[i_0 - i_2, i_1 - i_3]
+{ Induction Variable: 0 } - { Induction Variable: 2 }
+ ( M + 1 )  * ({ Induction Variable: 1 } - { Induction Variable: 3 })
+```
+Our desired/expected outcome.
 
 
 
