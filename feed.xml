@@ -23,6 +23,25 @@
 
 <item>
   <title>
+    <![CDATA[  Farkas&#39; Lemma  ]]>
+  </title>
+  <link> https://spmd.org/posts/farkas_lemma/index.html </link>
+  <guid> https://spmd.org/posts/farkas_lemma/index.html </guid>
+  <description>
+    <![CDATA[  This post gives a worked example of Farkas Lemma applied to loop optimization  ]]>
+  </description>  
+    
+  <pubDate>Thu, 24 Mar 2022 00:00:00 +0000</pubDate>  
+  
+  
+  <atom:author>
+    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
+  </atom:author>
+        
+</item>
+
+<item>
+  <title>
     <![CDATA[  Orthogonalize Indexes  ]]>
   </title>
   <link> https://spmd.org/posts/orthogonalizing_loops/index.html </link>
