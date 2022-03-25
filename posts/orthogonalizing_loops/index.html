@@ -1,356 +1,183 @@
-<!doctype html> <html lang=en > <meta charset=UTF-8 > <meta name=viewport  content="width=device-width, initial-scale=1"> <link rel=stylesheet  href="/libs/katex/katex.min.css"> <link rel=stylesheet  href="/libs/highlight/github.min.css"> <link rel=stylesheet  href="/css/tachyons.css"> <link rel=icon  href="/assets/favicon.png"> <link rel=preconnect  href="https://fonts.gstatic.com"> <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel=stylesheet > <title>Orthogonalize Indexes</title> <style> body { font-size: 16px; background: #f1f1f1; line-height: 1.8; font-family: "PT Serif", sans-serif; margin: 0 auto 0 auto; } a { color: #333; border-bottom: 3px solid #e1e1e1; text-decoration: none; transition: opacity .15s ease-in; } a:hover,a:focus { color: #000; border-bottom: 3px solid #c1c1c1; transition: opacity .15s ease-in; } .colbox-blue { background-color: #eef3f5; padding-top: 5px; padding-right: 10px; padding-left: 10px; padding-bottom: 5px; margin-left: 5px; margin-top: 5px; margin-bottom: 5px; border-radius: 0 10px 10px 0; border-left: 5px solid #4c9cf1; } blockquote { background: var(--block-background); border-left: 7px solid #a8a8a8; margin: 1.5em 10px; padding: 0.5em 10px; font-style: italic; } blockquote p { display: inline; } .hljs { font-family: "Fira Code", monospace; font-size: 14px; line-height: 1.35em; border-radius: 2px; } </style> <div class="pa5 pt4 pb4" style="margin: 0 auto; max-width: 900px; background: #ffffff"> <header> <div class="f2 lh-copy b"><a href="/" class="bn dim normal gray">Loop Compiler</a></div> <nav> <ul class="flex list pl0 bt bb b--moon-gray mb4"> <li class="pa2 pl0"><a class="bn dim" href="/">Home</a> </ul> </nav> </header> <h1 class="f2 lh-title normal dark-gray">Orthogonalize Indexes</h1> <div class="f5 lh-copy i gray">2022-03-14</div> <div class=franklin-content > <p>In a convolutional neural network, we are likely to have the following two pieces of code, calculating the forward pass, and then the revese pass for calculating the gradient with respect to <code>A</code>.</p> <pre><code class=language-julia-repl >julia&gt; using OffsetArrays
-
-julia&gt; function conv&#33;&#40;_C, _A, _B&#41;
-    A &#61; OffsetArray&#40;_A, OffsetArrays.Origin&#40;0,0&#41;&#41;
-    B &#61; OffsetArray&#40;_B, OffsetArrays.Origin&#40;0,0&#41;&#41;
-    C &#61; OffsetArray&#40;_C, OffsetArrays.Origin&#40;0,0&#41;&#41;
-    I, J &#61; size&#40;B&#41;
-    M, N &#61; size&#40;C&#41;
-    for n &#61; 0:N-1, m &#61; 0:M-1, i &#61; 0:I-1, j &#61; 0:J-1
-        C&#91;m,n&#93; &#43;&#61; A&#91;m &#43; i, n &#43; j&#93; * B&#91;i, j&#93;
+<!doctype html> <html lang=en > <meta charset=UTF-8 > <meta name=viewport  content="width=device-width, initial-scale=1"> <link rel=stylesheet  href="/libs/katex/katex.min.css"> <link rel=stylesheet  href="/libs/highlight/github.min.css"> <link rel=stylesheet  href="/css/tachyons.css"> <link rel=icon  href="/assets/favicon.png"> <link rel=preconnect  href="https://fonts.gstatic.com"> <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel=stylesheet > <title>Orthogonalize Indexes</title> <style> body { font-size: 16px; background: #f1f1f1; line-height: 1.8; font-family: "PT Serif", sans-serif; margin: 0 auto 0 auto; } a { color: #333; border-bottom: 3px solid #e1e1e1; text-decoration: none; transition: opacity .15s ease-in; } a:hover,a:focus { color: #000; border-bottom: 3px solid #c1c1c1; transition: opacity .15s ease-in; } .colbox-blue { background-color: #eef3f5; padding-top: 5px; padding-right: 10px; padding-left: 10px; padding-bottom: 5px; margin-left: 5px; margin-top: 5px; margin-bottom: 5px; border-radius: 0 10px 10px 0; border-left: 5px solid #4c9cf1; } blockquote { background: var(--block-background); border-left: 7px solid #a8a8a8; margin: 1.5em 10px; padding: 0.5em 10px; font-style: italic; } blockquote p { display: inline; } .hljs { font-family: "Fira Code", monospace; font-size: 14px; line-height: 1.35em; border-radius: 2px; } </style> <div class="pa5 pt4 pb4" style="margin: 0 auto; max-width: 900px; background: #ffffff"> <header> <div class="f2 lh-copy b"><a href="/" class="bn dim normal gray">Loop Compiler</a></div> <nav> <ul class="flex list pl0 bt bb b--moon-gray mb4"> <li class="pa2 pl0"><a class="bn dim" href="/">Home</a> </ul> </nav> </header> <h1 class="f2 lh-title normal dark-gray">Orthogonalize Indexes</h1> <div class="f5 lh-copy i gray">2022-03-14</div> <div class=franklin-content > <p>In a convolutional neural network, we are likely to have the following two pieces of code, calculating the forward pass, and then the revese pass for calculating the gradient with respect to <code>A</code>.</p> <pre><code class="julia-repl hljs"><span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > <span class=hljs-keyword >using</span> OffsetArrays
+</span>
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > <span class=hljs-keyword >function</span> conv!(_C, _A, _B)
+</span>    A = OffsetArray(_A, OffsetArrays.Origin(0,0))
+    B = OffsetArray(_B, OffsetArrays.Origin(0,0))
+    C = OffsetArray(_C, OffsetArrays.Origin(0,0))
+    I, J = size(B)
+    M, N = size(C)
+    for n = 0:N-1, m = 0:M-1, i = 0:I-1, j = 0:J-1
+        C[m,n] += A[m + i, n + j] * B[i, j]
     end
     return C
 end
 
-julia&gt; function convpullback&#33;&#40;_dA, _B, _dC&#41;
-    dA &#61; OffsetArray&#40;_dA, OffsetArrays.Origin&#40;0,0&#41;&#41;
-    B &#61; OffsetArray&#40;_B, OffsetArrays.Origin&#40;0,0&#41;&#41;
-    dC &#61; OffsetArray&#40;_dC, OffsetArrays.Origin&#40;0,0&#41;&#41;
-    I, J &#61; size&#40;B&#41;
-    M, N &#61; size&#40;dC&#41;
-    for n &#61; 0:N-1, m &#61; 0:M-1, i &#61; 0:I-1, j &#61; 0:J-1
-        dA&#91;m &#43; i, n &#43; j&#93; &#43;&#61; B&#91;i, j&#93; * dC&#91;m, n&#93;
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > <span class=hljs-keyword >function</span> convpullback!(_Ā, _B, _C̄)
+</span>    Ā = OffsetArray(_Ā, OffsetArrays.Origin(0,0))
+    B = OffsetArray(_B, OffsetArrays.Origin(0,0))
+    C̄ = OffsetArray(_C̄, OffsetArrays.Origin(0,0))
+    I, J = size(B)
+    M, N = size(C̄)
+    for n = 0:N-1, m = 0:M-1, i = 0:I-1, j = 0:J-1
+        Ā[m + i, n + j] += B[i, j] * C̄[m, n]
     end
-    return dA
-end</code></pre> <p>We left off the code for the reverse pass with respect to <code>B</code>, as it doesn&#39;t feature the problem this blog post focuses on solving: </p> <pre><code class=language-julia >dA&#91;m &#43; i, n &#43; j&#93; &#43;&#61;</code></pre>
-<p>While the forward pass is easy to optimize via register tiling, this is not the case for the pullback: the index into <code>dA</code> is dependent on all four loop induction variables, making it impossible to hoist these loads and stores out of any loops, forcing us to reload and restore memory on every iteration, meaning it takes many times more CPU instructions to evaluate.</p>
-<p>I&#39;ll add a post detailing register tiling, but for now just note that asside from reducing the loads and stores to <code>dA</code> by factors equal to the loops they&#39;re  hoisted out of, it would also results in several times fewer loads from <code>B</code> and from <code>dC</code>, enabling code to start attaining significant fractions of peak flops. An order of magnitude difference in performance is often a fair ballpark for the benefit of register tiling.</p>
-<p>So, now the question that&#39;s the focus of this post: can we re-index the memory accesses so that <code>dA</code> is dependent on only two loops? That is, we want to produce a new set of loops that looks more like</p>
-<pre><code class=language-julia >for w in W, x in X
-    dAwx &#61; dA&#91;w, x&#93;
-    for y in Y, z in Z
-        dAwx &#43;&#61; B&#91;???&#93; * dC&#91;???&#93;
-    end
-    dA&#91;w, x&#93; &#61; dAwx
-end</code></pre>
-<p>which would allow us to register tile. If we can, what are the new ranges <code>W</code>, <code>X</code>, <code>Y</code>, and <code>Z</code>, and what are the new indices into <code>B</code> and <code>dC</code>? Can we develop a general algorithm?</p>
+    return Ā
+end</code></pre> <p>We left off the code for the reverse pass with respect to <code>B</code>, as it doesn&#39;t feature the problem this blog post focuses on solving: </p> <pre><code class="julia hljs">Ā[m + i, n + j] +=</code></pre>
+<p>While the forward pass is easy to optimize via register tiling, this is not the case for the pullback: the index into <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent=true ><mi>A</mi><mo>ˉ</mo></mover></mrow><annotation encoding="application/x-tex">\bar{A}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.8201099999999999em;vertical-align:0em;"></span><span class="mord accent"><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.8201099999999999em;"><span style="top:-3em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal">A</span></span></span><span style="top:-3.25233em;"><span class=pstrut  style="height:3em;"></span><span class=accent-body  style="left:-0.11110999999999999em;"><span class=mord >ˉ</span></span></span></span></span></span></span></span></span></span> is dependent on all four loop induction variables, making it impossible to hoist these loads and stores out of any loops, forcing us to reload and restore memory on every iteration, meaning it takes many times more CPU instructions to evaluate.</p>
+<p>I&#39;ll add a post detailing register tiling, but for now just note that asside from reducing the loads and stores to <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent=true ><mi>A</mi><mo>ˉ</mo></mover></mrow><annotation encoding="application/x-tex">\bar{A}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.8201099999999999em;vertical-align:0em;"></span><span class="mord accent"><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.8201099999999999em;"><span style="top:-3em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal">A</span></span></span><span style="top:-3.25233em;"><span class=pstrut  style="height:3em;"></span><span class=accent-body  style="left:-0.11110999999999999em;"><span class=mord >ˉ</span></span></span></span></span></span></span></span></span></span> by factors equal to the loops they&#39;re  hoisted out of, it would also results in several times fewer loads from <code>B</code> and from <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent=true ><mi>C</mi><mo>ˉ</mo></mover></mrow><annotation encoding="application/x-tex">\bar{C}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.8201099999999999em;vertical-align:0em;"></span><span class="mord accent"><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.8201099999999999em;"><span style="top:-3em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal" style="margin-right:0.07153em;">C</span></span></span><span style="top:-3.25233em;"><span class=pstrut  style="height:3em;"></span><span class=accent-body  style="left:-0.16666em;"><span class=mord >ˉ</span></span></span></span></span></span></span></span></span></span>, enabling code to start attaining significant fractions of peak flops. An order of magnitude difference in performance is often a fair ballpark for the benefit of register tiling.</p>
+<p>So, now the question that&#39;s the focus of this post: can we re-index the memory accesses so that <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent=true ><mi>A</mi><mo>ˉ</mo></mover></mrow><annotation encoding="application/x-tex">\bar{A}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.8201099999999999em;vertical-align:0em;"></span><span class="mord accent"><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.8201099999999999em;"><span style="top:-3em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal">A</span></span></span><span style="top:-3.25233em;"><span class=pstrut  style="height:3em;"></span><span class=accent-body  style="left:-0.11110999999999999em;"><span class=mord >ˉ</span></span></span></span></span></span></span></span></span></span> is dependent on only two loops? That is, we want to produce a new set of loops that looks more like</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >for</span> w <span class=hljs-keyword >in</span> W, x <span class=hljs-keyword >in</span> X
+    Āwx = Ā[w, x]
+    <span class=hljs-keyword >for</span> y <span class=hljs-keyword >in</span> Y, z <span class=hljs-keyword >in</span> Z
+        Āwx += B[???] * C̄[???]
+    <span class=hljs-keyword >end</span>
+    Ā[w, x] = Āwx
+<span class=hljs-keyword >end</span></code></pre>
+<p>which would allow us to register tile. If we can, what are the new ranges <code>W</code>, <code>X</code>, <code>Y</code>, and <code>Z</code>, and what are the new indices into <code>B</code> and <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent=true ><mi>C</mi><mo>ˉ</mo></mover></mrow><annotation encoding="application/x-tex">\bar{C}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.8201099999999999em;vertical-align:0em;"></span><span class="mord accent"><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.8201099999999999em;"><span style="top:-3em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal" style="margin-right:0.07153em;">C</span></span></span><span style="top:-3.25233em;"><span class=pstrut  style="height:3em;"></span><span class=accent-body  style="left:-0.16666em;"><span class=mord >ˉ</span></span></span></span></span></span></span></span></span></span>? Can we develop a general algorithm?</p>
 <p>Often, a human can look at a problem and reason their way to a solution without too much difficulty. While our goal is to create a general algorithm to remove the need for expert human intervention &#40;especially to enable codegen tools like reverse diff on loops to be produce optimal code; it is an express goal that naive loops &#43; an AD tool like <a href="https://github.com/EnzymeAD/Enzyme">Enzyme</a> &#43; the new LoopVectorization will achieve or best state of the art performance across a wide range of loops&#41;, I find this is a useful starting point for building an intuition of the problem, which in turn can help point to general algorithms.</p>
-<p>We want to set <code>w &#61; m &#43; i</code>, and <code>x &#61; n &#43; j</code>, thus <code>W</code> must iterate over the full range of values attained by <code>m &#43; i</code>, i.e. <code>w &#61; 0:M&#43;N-2</code>, and <code>x &#61; 0:N&#43;J-2</code>. We may now naively try setting the indices of <code>B&#91;i,j&#93;</code> to <code>B&#91;y,z&#93;</code> and working through the implications; what would this imply about the indicesof <code>dC</code>, and about the ranges <code>Y</code> and <code>Z</code>?</p>
-<p>First, it&#39;s straightforward to find that we must have <code>dC&#91;w-y, x-z&#93;</code>, as <code>m &#61; w - i &#61; w - y</code>, and we can prove <code>n</code> similarly.</p>
+<p>We want to set <code>w &#61; m &#43; i</code>, and <code>x &#61; n &#43; j</code>, thus <code>W</code> must iterate over the full range of values attained by <code>m &#43; i</code>, i.e. <code>w &#61; 0:M&#43;N-2</code>, and <code>x &#61; 0:N&#43;J-2</code>. We may now naively try setting the indices of <code>B&#91;i,j&#93;</code> to <code>B&#91;y,z&#93;</code> and working through the implications; what would this imply about the indicesof <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent=true ><mi>C</mi><mo>ˉ</mo></mover></mrow><annotation encoding="application/x-tex">\bar{C}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.8201099999999999em;vertical-align:0em;"></span><span class="mord accent"><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.8201099999999999em;"><span style="top:-3em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal" style="margin-right:0.07153em;">C</span></span></span><span style="top:-3.25233em;"><span class=pstrut  style="height:3em;"></span><span class=accent-body  style="left:-0.16666em;"><span class=mord >ˉ</span></span></span></span></span></span></span></span></span></span>, and about the ranges <code>Y</code> and <code>Z</code>?</p>
+<p>First, it&#39;s straightforward to find that we must have <code>C̄&#91;w-y, x-z&#93;</code>, as <code>m &#61; w - i &#61; w - y</code>, and we can prove <code>n</code> similarly.</p>
 <p>For the bounds on <code>y</code>, note that <code>y &#61; i</code>, and <code>0 &lt;&#61; i &lt;&#61; I-1</code>, thus <code>0 &lt;&#61; y &lt;&#61; I-1</code>. However, we also have that <code>0 &lt;&#61; m &lt;&#61; M-1</code>, therefore <code>0 &lt;&#61; w-y &lt;&#61; M-1</code>, which means <code>y &lt;&#61; w</code> and <code>y &gt;&#61; w - &#40;M-1&#41;</code>. Taking the intersection yields <code>max&#40;0, w - &#40;M-1&#41;&#41; &lt;&#61; y &lt;&#61; min&#40;I-1, w&#41;</code>. We can apply the same argument for <code>z</code> to produce the bounds <code>max&#40;0, x - &#40;N-1&#41;&#41; &lt;&#61; z &lt;&#61; min&#40;J-1, x&#41;</code>.</p>
 <p>To make this algorithmic, we represent the loop bounds via a system of inequalities:</p>
-<pre><code class=language-julia >&#91; 1  0  0  0    &#91; m         &#91; M-1
- -1  0  0  0      n    .&lt;&#61;     0
-  0  1  0  0      i           N-1
-  0 -1  0  0      j &#93;          0
-  0  0  1  0                  I-1
-  0  0 -1  0                   0
-  0  0  0  1                  J-1
-  0  0  0 -1 &#93;                 0 &#93;
-# A * &#91;m;n;i;j&#93; &lt;&#61; b</code></pre>
+<pre><code class="julia hljs">[ <span class=hljs-number >1</span>  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>    [ m         [ M-<span class=hljs-number >1</span>
+ -<span class=hljs-number >1</span>  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>      n    .&lt;=     <span class=hljs-number >0</span>
+  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>      i           N-<span class=hljs-number >1</span>
+  <span class=hljs-number >0</span> -<span class=hljs-number >1</span>  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>      j ]          <span class=hljs-number >0</span>
+  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>                  I-<span class=hljs-number >1</span>
+  <span class=hljs-number >0</span>  <span class=hljs-number >0</span> -<span class=hljs-number >1</span>  <span class=hljs-number >0</span>                   <span class=hljs-number >0</span>
+  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>                  J-<span class=hljs-number >1</span>
+  <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >0</span> -<span class=hljs-number >1</span> ]                 <span class=hljs-number >0</span> ]
+<span class=hljs-comment ># A * [m;n;i;j] &lt;= b</span></code></pre>
 <p>and the indices with a matrix</p>
-<pre><code class=language-julia >&#91; 1 0 1 0   * &#91; m         &#91; m &#43; i
-  0 1 0 1       n    .&#61;&#61;    n &#43; j
-  1 0 0 0       i           m
-  0 1 0 0       j &#93;         n
-  0 0 1 0                   i
-  0 0 0 1 &#93;                 j     &#93;
+<pre><code class="julia hljs">[ <span class=hljs-number >1</span> <span class=hljs-number >0</span> <span class=hljs-number >1</span> <span class=hljs-number >0</span>   * [ m         [ m + i
+  <span class=hljs-number >0</span> <span class=hljs-number >1</span> <span class=hljs-number >0</span> <span class=hljs-number >1</span>       n    .==    n + j
+  <span class=hljs-number >1</span> <span class=hljs-number >0</span> <span class=hljs-number >0</span> <span class=hljs-number >0</span>       i           m
+  <span class=hljs-number >0</span> <span class=hljs-number >1</span> <span class=hljs-number >0</span> <span class=hljs-number >0</span>       j ]         n
+  <span class=hljs-number >0</span> <span class=hljs-number >0</span> <span class=hljs-number >1</span> <span class=hljs-number >0</span>                   i
+  <span class=hljs-number >0</span> <span class=hljs-number >0</span> <span class=hljs-number >0</span> <span class=hljs-number >1</span> ]                 j     ]
 
-# X * &#91;m;n;i;j&#93; &#61;&#61; &#91;index expressions...&#93;</code></pre>
-<p>Letting the index matrix be <code>X</code>, we can then frame our objective as finding some invertible matrix <code>K</code> such that the first two rows of <code>X*K</code> are linearly independent single-element vectors, with <code>1</code> as the single element. We can permute the columns of <code>K</code> arbitrarily to simplify this to say <code>X*K</code>&#39;s first two rows should be <code>hcat&#40;I&#40;2&#41;, 0&#41;</code>. With this, we can insert \(\textnf{I} = \textbf{KK}\^{-1}\) to apply the transform. This also defines our new loop induction variables \(
+<span class=hljs-comment ># X * [m;n;i;j] == [index expressions...]</span></code></pre>
+<p>Letting the index matrix be <code>X</code>, we can then frame our objective as finding some invertible matrix <code>K</code> such that the first two rows of <code>X*K</code> are linearly independent single-element vectors, with <code>1</code> as the single element. We can permute the columns of <code>K</code> arbitrarily to simplify this to say <code>X*K</code>&#39;s first two rows should be <code>hcat&#40;I&#40;2&#41;, 0&#41;</code>. With this, we can insert <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant=bold >I</mtext><mo>=</mo><msup><mtext mathvariant=bold >KK</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\textbf{I} = \textbf{KK}^{-1}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68611em;vertical-align:0em;"></span><span class="mord text"><span class="mord textbf">I</span></span><span class=mspace  style="margin-right:0.2777777777777778em;"></span><span class=mrel >=</span><span class=mspace  style="margin-right:0.2777777777777778em;"></span></span><span class=base ><span class=strut  style="height:0.890118em;vertical-align:0em;"></span><span class=mord ><span class="mord text"><span class="mord textbf">KK</span></span><span class=msupsub ><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.890118em;"><span style="top:-3.13901em;margin-right:0.05em;"><span class=pstrut  style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span></span></span></span></span></span></span></span> to apply the transform. This also defines our new loop induction variables <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mtext mathvariant=bold >K</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup><mrow><mo fence=true >[</mo><mtable rowspacing=0.15999999999999992em  columnspacing=1em ><mtr><mtd><mstyle scriptlevel=0  displaystyle=false ><mi>m</mi></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel=0  displaystyle=false ><mi>n</mi></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel=0  displaystyle=false ><mi>i</mi></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel=0  displaystyle=false ><mi>j</mi></mstyle></mtd></mtr></mtable><mo fence=true >]</mo></mrow><mo>=</mo><mrow><mo fence=true >[</mo><mtable rowspacing=0.15999999999999992em  columnspacing=1em ><mtr><mtd><mstyle scriptlevel=0  displaystyle=false ><mi>w</mi></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel=0  displaystyle=false ><mi>x</mi></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel=0  displaystyle=false ><mi>y</mi></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel=0  displaystyle=false ><mi>z</mi></mstyle></mtd></mtr></mtable><mo fence=true >]</mo></mrow></mrow><annotation encoding="application/x-tex">
 \textbf{K}^{-1}\begin{bmatrix}m\\n\\i\\j\end{bmatrix}=
 \begin{bmatrix}w\\x\\y\\z\end{bmatrix}
-\) Define \(\textbf{w}\) as our new vector of induction variables, we can also express our new loop inequalities simply as \(\textbf{AK}^{-1}\textbf{v} <= \textbf{b}\).</p>
-<p>This means that all we have left to do is actually find the matrix \(K\). As \(K\) must be both an integer matrix and invertible, it is unimodular. As the first two rows of \(\textbf{XK}\) correspond to the identity matrix, we know the first two rows of \(X\) equal the first two rows of \(\textbf{K}^{-1}\).</p>
-<p>From here, we realize that we can find such a matrix by modifying the algorithms typically used to bring matrices into reduced forms, such as reduced echelon form or the Hermite normal form. We can use column pivots and row additions &#40;using  integer multipliers&#41;, as these preserve the determinant and maintain the status as an integer matrix&#41;. We diagonalize one row at a time. When we encounter a row we cannot diagonalize, that  means this index cannot produce a unimodular matrix in combination with the preceding indices, thus we reject it and move on to the next index. In this way our matrix \(\textbf{K}^{-1}\) can be a subset of up to <code>size&#40;X,2&#41;</code> rows of \(\textbf{X}\), not just the first two. The important characteristics here are that it allows us to choose which indices to prioritize – e.g. those that would enable register tiling – while still simplifying/ maintaining simplicity in some other indices. If we run out of rows of \(\textbf{X}\), then the algorithm will still succeed, but then \(\textbf{K}^{-1}\) will include rows not present in \(\textbf{X}\).</p>
-<p>Inputting the loop bounds &#40;as <code>0 &lt;&#61; i_0 &lt;&#61; M-1</code>, <code>0 &lt;&#61; i_1 &lt;&#61; N-1</code>, <code>0 &lt;&#61; i_2 &lt;&#61; O-1</code>, and <code>0 &lt;&#61; i_3 &lt;&#61; P-1</code>&#41; and the indices, we get the output:</p>
-<pre><code class=language-julia >Loop 0 lower bounds:
-i_0 &gt;&#61; 0
-Loop 0 upper bounds:
-i_0 &lt;&#61;  &#40; M &#43; O - 2 &#41;
-Loop 1 lower bounds:
-i_1 &gt;&#61; 0
-Loop 1 upper bounds:
-i_1 &lt;&#61;  &#40; N &#43; P - 2 &#41;
-Loop 2 lower bounds:
-i_2 &gt;&#61;  &#40; - M &#43; 1 &#41;  &#43; i_0
-i_2 &gt;&#61; 0
-Loop 2 upper bounds:
-i_2 &lt;&#61; i_0
-i_2 &lt;&#61;  &#40; O - 1 &#41;
-Loop 3 lower bounds:
-i_3 &gt;&#61;  &#40; - N &#43; 1 &#41;  &#43; i_1
-i_3 &gt;&#61; 0
-Loop 3 upper bounds:
-i_3 &lt;&#61; i_1
-i_3 &lt;&#61;  &#40; P - 1 &#41;
+</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:4.80303em;vertical-align:-2.15003em;"></span><span class=mord ><span class="mord text"><span class="mord textbf">K</span></span><span class=msupsub ><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.890118em;"><span style="top:-3.13901em;margin-right:0.05em;"><span class=pstrut  style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span></span></span></span></span><span class=mspace  style="margin-right:0.16666666666666666em;"></span><span class=minner ><span class=mopen ><span class="delimsizing mult"><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:2.6529999999999996em;"><span style="top:-1.6499900000000003em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎣</span></span></span><span style="top:-2.79999em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎢</span></span></span><span style="top:-3.3959900000000003em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎢</span></span></span><span style="top:-3.4119800000000002em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎢</span></span></span><span style="top:-4.653em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎡</span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:2.15003em;"><span></span></span></span></span></span></span><span class=mord ><span class=mtable ><span class=col-align-c ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:2.6500000000000004em;"><span style="top:-4.8100000000000005em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal">m</span></span></span><span style="top:-3.61em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal">n</span></span></span><span style="top:-2.4099999999999997em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal">i</span></span></span><span style="top:-1.2099999999999997em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal" style="margin-right:0.05724em;">j</span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:2.1500000000000004em;"><span></span></span></span></span></span></span></span><span class=mclose ><span class="delimsizing mult"><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:2.6529999999999996em;"><span style="top:-1.6499900000000003em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎦</span></span></span><span style="top:-2.79999em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎥</span></span></span><span style="top:-3.3959900000000003em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎥</span></span></span><span style="top:-3.4119800000000002em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎥</span></span></span><span style="top:-4.653em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎤</span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:2.15003em;"><span></span></span></span></span></span></span></span><span class=mspace  style="margin-right:0.2777777777777778em;"></span><span class=mrel >=</span><span class=mspace  style="margin-right:0.2777777777777778em;"></span></span><span class=base ><span class=strut  style="height:4.80303em;vertical-align:-2.15003em;"></span><span class=minner ><span class=mopen ><span class="delimsizing mult"><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:2.6529999999999996em;"><span style="top:-1.6499900000000003em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎣</span></span></span><span style="top:-2.79999em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎢</span></span></span><span style="top:-3.3959900000000003em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎢</span></span></span><span style="top:-3.4119800000000002em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎢</span></span></span><span style="top:-4.653em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎡</span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:2.15003em;"><span></span></span></span></span></span></span><span class=mord ><span class=mtable ><span class=col-align-c ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:2.6500000000000004em;"><span style="top:-4.8100000000000005em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal" style="margin-right:0.02691em;">w</span></span></span><span style="top:-3.61em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal">x</span></span></span><span style="top:-2.4099999999999997em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal" style="margin-right:0.03588em;">y</span></span></span><span style="top:-1.2099999999999997em;"><span class=pstrut  style="height:3em;"></span><span class=mord ><span class="mord mathnormal" style="margin-right:0.04398em;">z</span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:2.1500000000000004em;"><span></span></span></span></span></span></span></span><span class=mclose ><span class="delimsizing mult"><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:2.6529999999999996em;"><span style="top:-1.6499900000000003em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎦</span></span></span><span style="top:-2.79999em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎥</span></span></span><span style="top:-3.3959900000000003em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎥</span></span></span><span style="top:-3.4119800000000002em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎥</span></span></span><span style="top:-4.653em;"><span class=pstrut  style="height:3.1550000000000002em;"></span><span class="delimsizinginner delim-size4"><span>⎤</span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:2.15003em;"><span></span></span></span></span></span></span></span></span></span></span>. Define <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant=bold >w</mtext></mrow><annotation encoding="application/x-tex">\textbf{w}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.44444em;vertical-align:0em;"></span><span class="mord text"><span class="mord textbf">w</span></span></span></span></span> as our new vector of induction variables, we can also express our new loop inequalities simply as <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mtext mathvariant=bold >AK</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup><mtext mathvariant=bold >v</mtext><mo>&lt;</mo><mo>=</mo><mtext mathvariant=bold >b</mtext></mrow><annotation encoding="application/x-tex">\textbf{AK}^{-1}\textbf{v} &lt;= \textbf{b}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.929218em;vertical-align:-0.0391em;"></span><span class=mord ><span class="mord text"><span class="mord textbf">AK</span></span><span class=msupsub ><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.890118em;"><span style="top:-3.13901em;margin-right:0.05em;"><span class=pstrut  style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span></span></span></span></span><span class="mord text"><span class="mord textbf">v</span></span><span class=mspace  style="margin-right:0.2777777777777778em;"></span><span class=mrel >&lt;</span></span><span class=base ><span class=strut  style="height:0.36687em;vertical-align:0em;"></span><span class=mrel >=</span><span class=mspace  style="margin-right:0.2777777777777778em;"></span></span><span class=base ><span class=strut  style="height:0.69444em;vertical-align:0em;"></span><span class="mord text"><span class="mord textbf">b</span></span></span></span></span>.</p>
+<p>&#40;Note that <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mtext mathvariant=bold >K</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\textbf{K}^{-1}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.890118em;vertical-align:0em;"></span><span class=mord ><span class="mord text"><span class="mord textbf">K</span></span><span class=msupsub ><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.890118em;"><span style="top:-3.13901em;margin-right:0.05em;"><span class=pstrut  style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span></span></span></span></span></span></span></span> is a simple representation of a linear loop schedule – it is a linear function that gives the order in which iterations of the loops are evaluated. We will discuss affine schedules in much greater detail in a future post.&#41;</p>
+<p>This means that all we have left to do is actually find the matrix <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68333em;vertical-align:0em;"></span><span class="mord mathnormal" style="margin-right:0.07153em;">K</span></span></span></span>. As <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68333em;vertical-align:0em;"></span><span class="mord mathnormal" style="margin-right:0.07153em;">K</span></span></span></span> must be both an integer matrix and invertible, it is unimodular. As the first two rows of <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant=bold >XK</mtext></mrow><annotation encoding="application/x-tex">\textbf{XK}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68611em;vertical-align:0em;"></span><span class="mord text"><span class="mord textbf">XK</span></span></span></span></span> correspond to the identity matrix, we know the first two rows of <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi></mrow><annotation encoding="application/x-tex">X</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68333em;vertical-align:0em;"></span><span class="mord mathnormal" style="margin-right:0.07847em;">X</span></span></span></span> equal the first two rows of <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mtext mathvariant=bold >K</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\textbf{K}^{-1}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.890118em;vertical-align:0em;"></span><span class=mord ><span class="mord text"><span class="mord textbf">K</span></span><span class=msupsub ><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.890118em;"><span style="top:-3.13901em;margin-right:0.05em;"><span class=pstrut  style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span></span></span></span></span></span></span></span>.</p>
+<p>From here, we realize that we can find such a matrix by modifying the algorithms typically used to bring matrices into reduced forms, such as reduced echelon form or the Hermite normal form. We can use column pivots and row additions &#40;using  integer multipliers&#41;, as these preserve the determinant and maintain the status as an integer matrix&#41;. We diagonalize one row at a time. When we encounter a row we cannot diagonalize, that  means this index cannot produce a unimodular matrix in combination with the preceding indices, thus we reject it and move on to the next index. In this way our matrix <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mtext mathvariant=bold >K</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\textbf{K}^{-1}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.890118em;vertical-align:0em;"></span><span class=mord ><span class="mord text"><span class="mord textbf">K</span></span><span class=msupsub ><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.890118em;"><span style="top:-3.13901em;margin-right:0.05em;"><span class=pstrut  style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span></span></span></span></span></span></span></span> can be a subset of up to <code>size&#40;X,2&#41;</code> rows of <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant=bold >X</mtext></mrow><annotation encoding="application/x-tex">\textbf{X}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68611em;vertical-align:0em;"></span><span class="mord text"><span class="mord textbf">X</span></span></span></span></span>, not just the first two. The important characteristics here are that it allows us to choose which indices to prioritize – e.g. those that would enable register tiling – while still simplifying/ maintaining simplicity in some other indices. If we run out of rows of <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant=bold >X</mtext></mrow><annotation encoding="application/x-tex">\textbf{X}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68611em;vertical-align:0em;"></span><span class="mord text"><span class="mord textbf">X</span></span></span></span></span>, then the algorithm will still succeed, but then <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mtext mathvariant=bold >K</mtext><mrow><mo>−</mo><mn>1</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\textbf{K}^{-1}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.890118em;vertical-align:0em;"></span><span class=mord ><span class="mord text"><span class="mord textbf">K</span></span><span class=msupsub ><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.890118em;"><span style="top:-3.13901em;margin-right:0.05em;"><span class=pstrut  style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1</span></span></span></span></span></span></span></span></span></span></span></span> will include rows not present in <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant=bold >X</mtext></mrow><annotation encoding="application/x-tex">\textbf{X}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68611em;vertical-align:0em;"></span><span class="mord text"><span class="mord textbf">X</span></span></span></span></span>.</p>
+<p>Inputting the loop bounds &#40;as <code>0 &lt;&#61; i_0 &lt;&#61; M-1</code>, <code>0 &lt;&#61; i_1 &lt;&#61; N-1</code>, <code>0 &lt;&#61; i_2 &lt;&#61; O-1</code>, and <code>0 &lt;&#61; i_3 &lt;&#61; P-1</code>&#41; and the indices, we get the following output post-transformation:</p>
+<pre><code class="julia hljs">Loop <span class=hljs-number >0</span> lower bounds:
+i_0 &gt;= <span class=hljs-number >0</span>
+Loop <span class=hljs-number >0</span> upper bounds:
+i_0 &lt;=  ( M + O - <span class=hljs-number >2</span> )
+Loop <span class=hljs-number >1</span> lower bounds:
+i_1 &gt;= <span class=hljs-number >0</span>
+Loop <span class=hljs-number >1</span> upper bounds:
+i_1 &lt;=  ( N + P - <span class=hljs-number >2</span> )
+Loop <span class=hljs-number >2</span> lower bounds:
+i_2 &gt;=  ( - M + <span class=hljs-number >1</span> )  + i_0
+i_2 &gt;= <span class=hljs-number >0</span>
+Loop <span class=hljs-number >2</span> upper bounds:
+i_2 &lt;= i_0
+i_2 &lt;=  ( O - <span class=hljs-number >1</span> )
+Loop <span class=hljs-number >3</span> lower bounds:
+i_3 &gt;=  ( - N + <span class=hljs-number >1</span> )  + i_1
+i_3 &gt;= <span class=hljs-number >0</span>
+Loop <span class=hljs-number >3</span> upper bounds:
+i_3 &lt;= i_1
+i_3 &lt;=  ( P - <span class=hljs-number >1</span> )
 
-ArrayReference 0 &#40;dim &#61; 2&#41;: # dA&#91;i_0, i_1&#93;
-&#123; Induction Variable: 0 &#125;
- &#40; M &#43; O - 1 &#41;  * &#40;&#123; Induction Variable: 1 &#125;&#41;
+New ArrayReferences:
+ArrayReference <span class=hljs-number >0</span> (dim = <span class=hljs-number >2</span>):
+{ Induction Variable: <span class=hljs-number >0</span> }
+ ( M + O - <span class=hljs-number >1</span> )  * ({ Induction Variable: <span class=hljs-number >1</span> })
 
-ArrayReference 1 &#40;dim &#61; 2&#41;: # B&#91;i_2, i_3&#93;
-&#123; Induction Variable: 2 &#125;
- &#40; O &#43; 1 &#41;  * &#40;&#123; Induction Variable: 3 &#125;&#41;
 
-ArrayReference 2 &#40;dim &#61; 2&#41;: # dC&#91;i_0 - i_2, i_1 - i_3&#93;
-&#123; Induction Variable: 0 &#125; - &#123; Induction Variable: 2 &#125;
- &#40; M &#43; 1 &#41;  * &#40;&#123; Induction Variable: 1 &#125; - &#123; Induction Variable: 3 &#125;&#41;</code></pre>
-<p>Our desired/expected outcome.</p>
-<p>Say we have code like the following:</p>
-<pre><code class=language-julia-repl >julia&gt; using OffsetArrays
 
-julia&gt; function badmul2&#33;&#40;C,A,B&#41;
-           M,N &#61; size&#40;C&#41;
-           K &#61; size&#40;B,1&#41;; fill&#33;&#40;C,0&#41;
-           for i in 0:M&#43;N&#43;K-3, l in max&#40;0,i&#43;1-N&#41;:min&#40;M&#43;K-2,i&#41;, j in max&#40;0,l&#43;1-K&#41;:min&#40;M-1,l&#41;
-               C&#91;j,i-l&#93; &#43;&#61; A&#91;j,l-j&#93;*B&#91;l-j,i-l&#93;
-           end
+ArrayReference <span class=hljs-number >1</span> (dim = <span class=hljs-number >2</span>):
+{ Induction Variable: <span class=hljs-number >2</span> }
+ ( O )  * ({ Induction Variable: <span class=hljs-number >3</span> })
+
+
+
+ArrayReference <span class=hljs-number >2</span> (dim = <span class=hljs-number >2</span>):
+{ Induction Variable: <span class=hljs-number >0</span> } - { Induction Variable: <span class=hljs-number >2</span> }
+ ( M )  * ({ Induction Variable: <span class=hljs-number >1</span> } - { Induction Variable: <span class=hljs-number >3</span> })</code></pre>
+<p>Our desired/expected outcome. We can now register tile the loop.</p>
+<p>Now let us move to a more artificial example, a deliberately badly written matrix-multiply:</p>
+<pre><code class="julia-repl hljs"><span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > <span class=hljs-keyword >using</span> OffsetArrays
+</span>
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > <span class=hljs-keyword >function</span> badmul!(C,A,B)
+           M,N = size(C)
+           K = size(B,<span class=hljs-number >1</span>); fill!(C,<span class=hljs-number >0</span>)
+           <span class=hljs-keyword >for</span> i <span class=hljs-keyword >in</span> <span class=hljs-number >0</span>:M+N+K-<span class=hljs-number >3</span>, l <span class=hljs-keyword >in</span> max(<span class=hljs-number >0</span>,i+<span class=hljs-number >1</span>-N):min(M+K-<span class=hljs-number >2</span>,i), j <span class=hljs-keyword >in</span> max(<span class=hljs-number >0</span>,l+<span class=hljs-number >1</span>-K):min(M-<span class=hljs-number >1</span>,l)
+               C[j,i-l] += A[j,l-j]*B[l-j,i-l]
+           <span class=hljs-keyword >end</span>
            C
-       end
-badmul2&#33; &#40;generic function with 1 method&#41;
+       <span class=hljs-keyword >end</span>
+</span>badmul! (generic function with 1 method)
 
-julia&gt; M,K,N &#61; 5,6,7
-&#40;5, 6, 7&#41;
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > M,K,N = <span class=hljs-number >5</span>,<span class=hljs-number >6</span>,<span class=hljs-number >7</span>
+</span>(5, 6, 7)
 
-julia&gt; A &#61; OffsetArray&#40;rand&#40;M,K&#41;,-1,-1&#41;;
-
-julia&gt; B &#61; OffsetArray&#40;rand&#40;K,N&#41;,-1,-1&#41;;
-
-julia&gt; C &#61; OffsetArray&#40;rand&#40;M,N&#41;,-1,-1&#41;;
-
-julia&gt; badmul2&#33;&#40;C,A,B&#41;
-5×7 OffsetArray&#40;::Matrix&#123;Float64&#125;, 0:4, 0:6&#41; with eltype Float64 with indices 0:4×0:6:
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > A = OffsetArray(rand(M,K),-<span class=hljs-number >1</span>,-<span class=hljs-number >1</span>);
+</span>
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > B = OffsetArray(rand(K,N),-<span class=hljs-number >1</span>,-<span class=hljs-number >1</span>);
+</span>
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > C = OffsetArray(rand(M,N),-<span class=hljs-number >1</span>,-<span class=hljs-number >1</span>);
+</span>
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > badmul!(C,A,B)
+</span>5×7 OffsetArray(::Matrix{Float64}, 0:4, 0:6) with eltype Float64 with indices 0:4×0:6:
  1.9536   1.20026   2.20549  1.11528   1.77055  2.14641  1.75909
  1.54733  1.10697   1.6769   1.13867   1.06312  1.71708  1.65325
  1.76249  0.908232  1.63373  0.995246  1.19762  1.69865  1.71706
  1.46832  0.939424  1.78488  1.36437   1.09265  1.69105  1.35382
  1.27257  0.770909  1.14775  0.596495  0.92855  1.21593  1.26251
 
-julia&gt; parent&#40;A&#41;*parent&#40;B&#41;
-5×7 Matrix&#123;Float64&#125;:
+<span class="hljs-meta prompt_">julia&gt;</span><span class=language-julia > parent(A)*parent(B)
+</span>5×7 Matrix{Float64}:
  1.9536   1.20026   2.20549  1.11528   1.77055  2.14641  1.75909
  1.54733  1.10697   1.6769   1.13867   1.06312  1.71708  1.65325
  1.76249  0.908232  1.63373  0.995246  1.19762  1.69865  1.71706
  1.46832  0.939424  1.78488  1.36437   1.09265  1.69105  1.35382
  1.27257  0.770909  1.14775  0.596495  0.92855  1.21593  1.26251</code></pre>
-<p>Let <code>L</code> be the vector of loop ind vars, so <code>L &#61; &#91;i, l, j&#93;</code>, and <code>I_&#123;X&#125;</code> be the set of indices for array <code>&#123;X&#125;</code>. Then let <code>I_&#123;X&#125; &#61; A_&#123;X&#125; * L</code></p>
-<pre><code class=language-julia-repl >julia&gt; A_A &#61; &#91; 0  0  1;
-               0  1 -1&#93;;
+<p>Entering the <code>badmul&#33;</code> loopnest into the orthoganlizer produces:</p>
+<pre><code class="julia hljs">Skewed loop nest:
+Loop <span class=hljs-number >0</span> lower bounds:
+i_0 &gt;= <span class=hljs-number >0</span>
+Loop <span class=hljs-number >0</span> upper bounds:
+i_0 &lt;=  ( M - <span class=hljs-number >1</span> )
+Loop <span class=hljs-number >1</span> lower bounds:
+i_1 &gt;= <span class=hljs-number >0</span>
+Loop <span class=hljs-number >1</span> upper bounds:
+i_1 &lt;=  ( N - <span class=hljs-number >1</span> )
+Loop <span class=hljs-number >2</span> lower bounds:
+i_2 &gt;= <span class=hljs-number >0</span>
+Loop <span class=hljs-number >2</span> upper bounds:
+i_2 &lt;=  ( O - <span class=hljs-number >1</span> )
 
-julia&gt; A_B &#61; &#91; 0  1 -1;
-               1 -1  0&#93;;
-
-julia&gt; A_C &#61; &#91; 0  0  1;
-               1 -1  0&#93;;</code></pre>
-<p>What we want is that each row has only a single non-zero element. Something something basis.</p>
-<pre><code class=language-julia-repl >julia&gt; U &#61; reduce&#40;hcat, unique&#40;Iterators.flatten&#40;Iterators.map&#40;eachrow, &#40;A_A, A_B, A_C&#41;&#41;&#41;&#41;&#41;&#39;
-3×3 adjoint&#40;::Matrix&#123;Int64&#125;&#41; with eltype Int64:
- 0   0   1
- 0   1  -1
- 1  -1   0
- 
-julia&gt; lu&#40;Rational.&#40;U&#41;&#41;
-LU&#123;Rational&#123;Int64&#125;, Matrix&#123;Rational&#123;Int64&#125;&#125;, Vector&#123;Int64&#125;&#125;
-L factor:
-3×3 Matrix&#123;Rational&#123;Int64&#125;&#125;:
- 1//1  0//1  0//1
- 0//1  1//1  0//1
- 0//1  0//1  1//1
-U factor:
-3×3 Matrix&#123;Rational&#123;Int64&#125;&#125;:
- 1//1  -1//1   0//1
- 0//1   1//1  -1//1
- 0//1   0//1   1//1
-
-julia&gt; inv&#40;ans&#41;
-3×3 Matrix&#123;Rational&#123;Int64&#125;&#125;:
- 1//1  1//1  1//1
- 1//1  1//1  0//1
- 1//1  0//1  0//1</code></pre>
-<p>We have <code>L &#61; A_&#123;X&#125; \ I_&#123;X&#125;</code>, but <code>A_&#123;X&#125;</code> is of course not necessarily square. Let <code>U*L &#61; O</code> so that <code>L &#61; U^&#123;-1&#125;*O</code> What we really want to do is transform the loops. Loop bounds are</p>
-\[\begin{aligned}
-\textbf{W}*\textbf{L} &\le \textbf{B}\\
-(\textbf{W}*\textbf{U}^{-1})*\textbf{O} &\le \textbf{B}
-\end{aligned}\]
-<p>In our example, we have</p>
-\[\begin{aligned}
-0 &\le i \le M+N+K-3\\
-0 &\le l \le M+K-2\\
-i-(N-1) &\le l \le i\\
-0 &\le j \le M-1\\
-l-(K-1) &\le j \le l
-\end{aligned}\]
-<pre><code class=language-julia-repl >julia&gt; W &#61; &#91; 1  0  0    #  &#91; i       &#91; M&#43;N&#43;K-3
-            -1  0  0    #    l    &lt;&#61;   0
-             0  1  0    #    j &#93;       M&#43;K-2
-             0 -1  0    #              0
-             1 -1  0    #              N-1
-            -1  1  0    #              0
-             0  0  1    #              M-1
-             0  0 -1    #              0
-             0  1 -1    #              K-1
-             0 -1  1 &#93;  #              0      &#93;
-
-julia&gt; WAi &#61; Int.&#40;W / lu&#40;Rational.&#40;U&#41;&#41;&#41;
-10×3 Matrix&#123;Int64&#125;: # let O &#61; &#91;x, y, z&#93;
-  1   1   1  #  &#91; x       &#91; M&#43;N&#43;K-3
- -1  -1  -1  #    y    &lt;&#61;   0
-  1   1   0  #    z &#93;       M&#43;K-2
- -1  -1   0  #              0
-  0   0   1  #              N-1
-  0   0  -1  #              0
-  1   0   0  #              M-1
- -1   0   0  #              0
-  0   1   0  #              K-1
-  0  -1   0  #              0      &#93;</code></pre>
-<p>So this tells us:</p>
-\[\begin{aligned}
-0 &\le z \le N-1\\
-0 &\le x \le M-1\\
-0 &\le y \le K-1
-\end{aligned}\]
-<p>Now, what happens if we have loops more like</p>
-<pre><code class=language-julia >for i in 0:I-1, j in 0:J-1, k in 0:K-1, l in 0:L-1
-    C&#91;i,j&#93; &#43;&#61; A&#91;i&#43;k,j&#43;l&#93;*B&#91;k,l&#93;
-end</code></pre>
-<p>more interesting, then... Lets say someone runs reverse diff on this With respect to the kernel:</p>
-<pre><code class=language-julia >for i in 0:I-1, j in 0:J-1, k in 0:K-1, l in 0:L-1
-    Bbar&#91;k,l&#93; &#43;&#61; A&#91;i&#43;k,j&#43;l&#93;*Cbar&#91;i,j&#93;
-end</code></pre>
-<p>This is nice and easy to optimize. Let&#39;s move on. With respect to whatever was being convolved with the kernel:</p>
-<pre><code class=language-julia >for i in 0:I-1, j in 0:J-1, k in 0:K-1, l in 0:L-1
-    Abar&#91;i&#43;k,j&#43;l&#93; &#43;&#61; Cbar&#91;i,j&#93;*B&#91;k,l&#93;
-end</code></pre>
-<p>&#40;You may need this if you have a convolution like this that isn&#39;t the first layer of a conv net, as it must backprop Abar to the preceding layer&#41; Let&#39;s try and get it so we can actually hoist <code>Abar</code> out of a few loops and tile.</p>
-<pre><code class=language-julia >A_Abar &#61; &#91;1 0 1 0;
-          0 1 0 1&#93;;
-
-A_Cbar &#61; &#91;1 0 0 0;
-          0 1 0 0&#93;;
-
-A_B    &#61; &#91;0 0 1 0;
-          0 0 0 1&#93;;</code></pre>
-<pre><code class=language-julia >for ik in 0:I&#43;K-2, jl in 0:J&#43;L-2, k in max&#40;0,ik-&#40;I&#43;K-2&#41;&#41;:min&#40;K-1,ik&#41;, l in max&#40;0,jl-&#40;J&#43;L-2&#41;&#41;:min&#40;L-1,jl&#41;
-    Abar&#91;ik, jl&#93; &#43;&#61; Cbar&#91;ik-k,jl-l&#93;*B&#91;k,l&#93;
-end
-U &#61; &#91; 1 0 1 0    # &#91; i   &#61; &#91; ik
-      0 1 0 1    #   j       jl
-      0 0 1 0    #   k       k
-      0 0 0 1 &#93;  #   l &#93;     l &#93;
-# L &#61; &#91;i, j, k, l&#93;
-# N &#61; &#91;ik, jl, k, l&#93;
-#
-# W * L &lt;&#61; B
-# U * L &#61;  N
-# L &#61; U^&#123;-1&#125;*N
-# &#40;W*U^&#123;-1&#125;&#41; * N &lt;&#61; B
-julia&gt; Uinv &#61; Int.&#40;inv&#40;lu&#40;Rational.&#40;U&#41;&#41;&#41;&#41;
-4×4 Matrix&#123;Int64&#125;:
- 1  0  -1   0
- 0  1   0  -1
- 0  0   1   0
- 0  0   0   1
-
-# 0 &lt;&#61; i &lt;&#61; I-1
-# 0 &lt;&#61; j &lt;&#61; J-1
-# 0 &lt;&#61; k &lt;&#61; K-1
-# 0 &lt;&#61; l &lt;&#61; L-1
-W &#61; &#91; 1  0  0  0    #  &#91; i    &lt;&#61; &#91; I-1
-     -1  0  0  0    #    j         0
-      0  1  0  0    #    k         J-1
-      0 -1  0  0    #    l &#93;       0
-      0  0  1  0    #              K-1
-      0  0 -1  0    #              0
-      0  0  0  1    #              L-1
-      0  0  0 -1 &#93;  #              0   &#93;
-
-julia&gt; W*Uinv
-8×4 Matrix&#123;Int64&#125;:
-  1   0  -1   0    #  &#91; ik   &lt;&#61; &#91; I-1
- -1   0   1   0    #    jl        0
-  0   1   0  -1    #    k         J-1
-  0  -1   0   1    #    l &#93;       0
-  0   0   1   0    #              K-1
-  0   0  -1   0    #              0
-  0   0   0   1    #              L-1
-  0   0   0  -1 &#93;  #              0   &#93;
-
-# 0 &lt;&#61; k &lt;&#61; K-1
-# 0 &lt;&#61; l &lt;&#61; L-1
-# k &lt;&#61; ik &lt;&#61; I-1 &#43; k
-# l &lt;&#61; jl &lt;&#61; J-1 &#43; l
-# now, we want to permute the &#96;ik&#96; loop to the outside
-# 0 &lt;&#61; ik &lt;&#61; I-1 &#43; K-1 &#61; I&#43;K-2
-# 0 &lt;&#61; k &lt;&#61; K-1
-# ik - I-1 &lt;&#61; k &lt;&#61; ik
-# now, we want to permute the &#96;jl&#96; loop to the outside
-# 0 &lt;&#61; jl &lt;&#61; J-1 &#43; L-1 &#61; J&#43;L-2
-# 0 &lt;&#61; l &lt;&#61; L-1
-# jl-&#40;J-1&#41; &lt;&#61; l &lt;&#61; jl</code></pre>
-<p>We can take the approach of starting with</p>
-\[\begin{aligned}
-\begin{bmatrix}
-1 & 0 & 1 & 0\\
-0 & 1 & 0 & 1\\
-\end{bmatrix}
-\begin{bmatrix}
-1 & 0 & 0 & 0\\
-0 & 1 & 0 & 0\\
-\end{bmatrix}
-\end{aligned}\]
-<p>try to reduce, and then keep adding rows from other indices one at a time until full rank is achieved. If an added row is a linear combination of existing rows, drop it and revert changes.</p>
-<p>We should solve for possible solutions. Reducing <code>U&#39;</code> to reduced row echelon form, we get</p>
-\[\begin{aligned}
-\begin{bmatrix}
-1 & 0 & 1 & 0 & 0 & 0\\
-0 & 1 & 0 & 1 & 0 & 0\\
-1 & 0 & 0 & 0 & 1 & 0\\
-0 & 1 & 0 & 0 & 0 & 1
-\end{bmatrix}
-\begin{bmatrix}
-1 & 0 & 0 & 0\\
-0 & 1 & 0 & 0\\
-0 & 0 & 1 & 0\\
-0 & 0 & 0 & 1
-\end{bmatrix}
-\rightarrow\\
-\begin{bmatrix}
-1 & 0 & 0 & 0 & 1 & 0\\
-0 & 1 & 0 & 0 & 0 & 1\\
-0 & 0 & 1 & 0 & -1 & 0\\
-0 & 0 & 0 & 1 & 0 & -1
-\end{bmatrix}
-\begin{bmatrix}
-0 & 0 & 1 & 0\\
-0 & 0 & 0 & 1\\
-1 & 0 & -1 & 0\\
-0 & 1 & 0 & -1
-\end{bmatrix}
-\end{aligned}\]
-<p>Letting <code>O &#61; &#91;w, x, y, z&#93;</code> be our new indices, we can interpret this as meaning we must have</p>
-\[\begin{aligned}
+New ArrayReferences:
+ArrayReference <span class=hljs-number >0</span> (dim = <span class=hljs-number >2</span>):
+{ Induction Variable: <span class=hljs-number >0</span> }
+ ( M )  * ({ Induction Variable: <span class=hljs-number >1</span> })
 
 
-\end{aligned}\]
-<p>Given <code>a</code>, <code>b</code>, <code>c</code>, and solve for <code>x</code>, <code>y</code>, <code>z</code> &#91;a b c&#93; &#91;x y z&#93;</p>
-<p>&#61;&gt;</p>
-<p>&#91;x y z&#93;            &#61; &#91;1 y z&#93; &#91;kx&#43;a, ky&#43;b, kz&#43;c&#93; &#61; &#91;0 i j&#93; such that <code>gcd&#40;i, j&#41; &#61;&#61; 1</code> x &#61;&#61; 1 &#61;&gt; k &#61; -a gcd&#40;-ay&#43;b, -az&#43;c&#41; &#61; 1 gcd&#40;b, -az&#43;c&#41; &#61; 1</p>
+
+ArrayReference <span class=hljs-number >1</span> (dim = <span class=hljs-number >2</span>):
+{ Induction Variable: <span class=hljs-number >0</span> }
+ ( O )  * ({ Induction Variable: <span class=hljs-number >2</span> })
+
+
+
+ArrayReference <span class=hljs-number >2</span> (dim = <span class=hljs-number >2</span>):
+{ Induction Variable: <span class=hljs-number >2</span> }
+ ( M )  * ({ Induction Variable: <span class=hljs-number >1</span> })</code></pre>
+<p>Recovering a perfectly-normal tripple-loop matrix multiply, that is straightforward to optimize via register and cache tiling.</p>
 <div class=page-foot >
   <div class="copyright bt b--moon-gray mt4 pt2">
       <small class=gray >
-    &copy; Chris Elrod, Yingbo Ma. Last modified: March 21, 2022. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>.
+    &copy; Chris Elrod, Yingbo Ma. Last modified: March 25, 2022. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>.
       </small>
   </div>
 </div>
 </div>
-    </div> 
-    
-        <script src="/libs/katex/katex.min.js"></script>
-<script src="/libs/katex/auto-render.min.js"></script>
-<script>renderMathInElement(document.body)</script>
-
-    
-    
-        <script src="/libs/highlight/highlight.pack.js"></script>
-<script>hljs.initHighlightingOnLoad();hljs.configure({tabReplace: '    '});</script>
+    </div>
