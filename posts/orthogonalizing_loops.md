@@ -26,51 +26,51 @@ julia> function conv!(_C, _A, _B)
     return C
 end
 
-julia> function convpullback!(_dA, _B, _dC)
-    dA = OffsetArray(_dA, OffsetArrays.Origin(0,0))
+julia> function convpullback!(_Ā, _B, _C̄)
+    Ā = OffsetArray(_Ā, OffsetArrays.Origin(0,0))
     B = OffsetArray(_B, OffsetArrays.Origin(0,0))
-    dC = OffsetArray(_dC, OffsetArrays.Origin(0,0))
+    C̄ = OffsetArray(_C̄, OffsetArrays.Origin(0,0))
     I, J = size(B)
-    M, N = size(dC)
+    M, N = size(C̄)
     for n = 0:N-1, m = 0:M-1, i = 0:I-1, j = 0:J-1
-        dA[m + i, n + j] += B[i, j] * dC[m, n]
+        Ā[m + i, n + j] += B[i, j] * C̄[m, n]
     end
-    return dA
+    return Ā
 end
 ```
 We left off the code for the reverse pass with respect to `B`, as it doesn't
 feature the problem this blog post focuses on solving: 
 ```julia
-dA[m + i, n + j] += 
+Ā[m + i, n + j] += 
 ```
 
 While the forward pass is easy to optimize via register tiling, this is not
-the case for the pullback: the index into `dA` is dependent on all four loop
+the case for the pullback: the index into $\bar{A}$ is dependent on all four loop
 induction variables, making it impossible to hoist these loads and stores
 out of any loops, forcing us to reload and restore memory on every iteration,
 meaning it takes many times more CPU instructions to evaluate.
 
 I'll add a post detailing register tiling, but for now just note that asside from
-reducing the loads and stores to `dA` by factors equal to the loops they're 
+reducing the loads and stores to $\bar{A}$ by factors equal to the loops they're 
 hoisted out of, it would also results in several times fewer loads from `B` and
-from `dC`, enabling code to start attaining significant fractions of peak flops.
+from $\bar{C}$, enabling code to start attaining significant fractions of peak flops.
 An order of magnitude difference in performance is often a fair ballpark for
 the benefit of register tiling.
 
 So, now the question that's the focus of this post: can we re-index the memory
-accesses so that `dA` is dependent on only two loops?
+accesses so that $\bar{A}$ is dependent on only two loops?
 That is, we want to produce a new set of loops that looks more like
 ```julia
 for w in W, x in X
-    dAwx = dA[w, x]
+    Āwx = Ā[w, x]
     for y in Y, z in Z
-        dAwx += B[???] * dC[???]
+        Āwx += B[???] * C̄[???]
     end
-    dA[w, x] = dAwx
+    Ā[w, x] = Āwx
 end
 ```
 which would allow us to register tile. If we can, what are the new ranges
-`W`, `X`, `Y`, and `Z`, and what are the new indices into `B` and `dC`?
+`W`, `X`, `Y`, and `Z`, and what are the new indices into `B` and $\bar{C}$?
 Can we develop a general algorithm?
 
 Often, a human can look at a problem and reason their way to a solution without
@@ -85,10 +85,10 @@ which in turn can help point to general algorithms.
 We want to set `w = m + i`, and `x = n + j`, thus `W` must iterate over the full
 range of values attained by `m + i`, i.e. `w = 0:M+N-2`, and `x = 0:N+J-2`.
 We may now naively try setting the indices of `B[i,j]` to `B[y,z]` and working
-through the implications; what would this imply about the indicesof `dC`, and
+through the implications; what would this imply about the indicesof $\bar{C}$, and
 about the ranges `Y` and `Z`?
 
-First, it's straightforward to find that we must have `dC[w-y, x-z]`, as
+First, it's straightforward to find that we must have `C̄[w-y, x-z]`, as
 `m = w - i = w - y`, and we can prove `n` similarly.
 
 For the bounds on `y`, note that `y = i`, and `0 <= i <= I-1`, thus
@@ -127,14 +127,20 @@ finding some invertible matrix `K` such that the first two rows of `X*K`
 are linearly independent single-element vectors, with `1` as the single element.
 We can permute the columns of `K` arbitrarily to simplify this to say `X*K`'s first
 two rows should be `hcat(I(2), 0)`.
-With this, we can insert $\textnf{I} = \textbf{KK}\^{-1}$ to apply the transform.
+With this, we can insert $\textbf{I} = \textbf{KK}^{-1}$ to apply the transform.
 This also defines our new loop induction variables
 $
 \textbf{K}^{-1}\begin{bmatrix}m\\n\\i\\j\end{bmatrix}=
 \begin{bmatrix}w\\x\\y\\z\end{bmatrix}
-$
+$.
 Define $\textbf{w}$ as our new vector of induction variables, we can also express
 our new loop inequalities simply as $\textbf{AK}^{-1}\textbf{v} <= \textbf{b}$.
+
+(Note that $\textbf{K}^{-1}$ is a simple representation of a linear loop schedule
+-- it is a linear function that gives the order in which iterations of the loops
+are evaluated. We will discuss affine schedules in much greater detail in a future
+post.)
+
 
 This means that all we have left to do is actually find the matrix $K$.
 As $K$ must be both an integer matrix and invertible, it is unimodular.
@@ -157,7 +163,7 @@ If we run out of rows of $\textbf{X}$, then the algorithm will still succeed, bu
 $\textbf{K}^{-1}$ will include rows not present in $\textbf{X}$.
 
 Inputting the loop bounds (as `0 <= i_0 <= M-1`, `0 <= i_1 <= N-1`, `0 <= i_2 <= O-1`,
-and `0 <= i_3 <= P-1`) and the indices, we get the output:
+and `0 <= i_3 <= P-1`) and the indices, we get the following output post-transformation:
 ```
 Loop 0 lower bounds:
 i_0 >= 0
@@ -180,27 +186,32 @@ Loop 3 upper bounds:
 i_3 <= i_1
 i_3 <=  ( P - 1 )
 
-ArrayReference 0 (dim = 2): # dA[i_0, i_1]
+New ArrayReferences:
+ArrayReference 0 (dim = 2):
 { Induction Variable: 0 }
  ( M + O - 1 )  * ({ Induction Variable: 1 })
 
-ArrayReference 1 (dim = 2): # B[i_2, i_3]
+
+
+ArrayReference 1 (dim = 2):
 { Induction Variable: 2 }
- ( O + 1 )  * ({ Induction Variable: 3 })
+ ( O )  * ({ Induction Variable: 3 })
 
-ArrayReference 2 (dim = 2): # dC[i_0 - i_2, i_1 - i_3]
+
+
+ArrayReference 2 (dim = 2):
 { Induction Variable: 0 } - { Induction Variable: 2 }
- ( M + 1 )  * ({ Induction Variable: 1 } - { Induction Variable: 3 })
+ ( M )  * ({ Induction Variable: 1 } - { Induction Variable: 3 })
 ```
-Our desired/expected outcome.
+Our desired/expected outcome. We can now register tile the loop.
 
 
 
-Say we have code like the following:
+Now let us move to a more artificial example, a deliberately badly written matrix-multiply:
 ```julia-repl
 julia> using OffsetArrays
 
-julia> function badmul2!(C,A,B)
+julia> function badmul!(C,A,B)
            M,N = size(C)
            K = size(B,1); fill!(C,0)
            for i in 0:M+N+K-3, l in max(0,i+1-N):min(M+K-2,i), j in max(0,l+1-K):min(M-1,l)
@@ -208,7 +219,7 @@ julia> function badmul2!(C,A,B)
            end
            C
        end
-badmul2! (generic function with 1 method)
+badmul! (generic function with 1 method)
 
 julia> M,K,N = 5,6,7
 (5, 6, 7)
@@ -219,7 +230,7 @@ julia> B = OffsetArray(rand(K,N),-1,-1);
 
 julia> C = OffsetArray(rand(M,N),-1,-1);
 
-julia> badmul2!(C,A,B)
+julia> badmul!(C,A,B)
 5×7 OffsetArray(::Matrix{Float64}, 0:4, 0:6) with eltype Float64 with indices 0:4×0:6:
  1.9536   1.20026   2.20549  1.11528   1.77055  2.14641  1.75909
  1.54733  1.10697   1.6769   1.13867   1.06312  1.71708  1.65325
@@ -235,6 +246,43 @@ julia> parent(A)*parent(B)
  1.46832  0.939424  1.78488  1.36437   1.09265  1.69105  1.35382
  1.27257  0.770909  1.14775  0.596495  0.92855  1.21593  1.26251
 ```
+Entering the `badmul!` loopnest into the orthoganlizer produces:
+```
+Skewed loop nest:
+Loop 0 lower bounds:
+i_0 >= 0
+Loop 0 upper bounds:
+i_0 <=  ( M - 1 )
+Loop 1 lower bounds:
+i_1 >= 0
+Loop 1 upper bounds:
+i_1 <=  ( N - 1 )
+Loop 2 lower bounds:
+i_2 >= 0
+Loop 2 upper bounds:
+i_2 <=  ( O - 1 )
+
+New ArrayReferences:
+ArrayReference 0 (dim = 2):
+{ Induction Variable: 0 }
+ ( M )  * ({ Induction Variable: 1 })
+
+
+
+ArrayReference 1 (dim = 2):
+{ Induction Variable: 0 }
+ ( O )  * ({ Induction Variable: 2 })
+
+
+
+ArrayReference 2 (dim = 2):
+{ Induction Variable: 2 }
+ ( M )  * ({ Induction Variable: 1 })
+```
+Recovering a perfectly-normal tripple-loop matrix multiply, that is straightforward to
+optimize via register and cache tiling.
+
+<!---
 Let `L` be the vector of loop ind vars, so `L = [i, l, j]`, and `I_{X}` be the
 set of indices for array `{X}`. Then let `I_{X} = A_{X} * L`
 ```julia-repl
@@ -339,27 +387,27 @@ Lets say someone runs reverse diff on this
 With respect to the kernel:
 ```julia
 for i in 0:I-1, j in 0:J-1, k in 0:K-1, l in 0:L-1
-    Bbar[k,l] += A[i+k,j+l]*Cbar[i,j]
+  ̄B[k,l] += A[i+k,j+l]*̄C[i,j]
 end
 ```
 This is nice and easy to optimize. Let's move on.
 With respect to whatever was being convolved with the kernel:
 ```julia
 for i in 0:I-1, j in 0:J-1, k in 0:K-1, l in 0:L-1
-    Abar[i+k,j+l] += Cbar[i,j]*B[k,l]
+    Ā[i+k,j+l] += C̄[i,j]*B[k,l]
 end
 ```
 (You may need this if you have a convolution like this that isn't the first
-layer of a conv net, as it must backprop Abar to the preceding layer)
-Let's try and get it so we can actually hoist `Abar` out of a few loops and
+layer of a conv net, as it must backprop $\bar{A}$ to the preceding layer)
+Let's try and get it so we can actually hoist $\bar{A}$ out of a few loops and
 tile.
 
 ```julia
-A_Abar = [1 0 1 0;
-          0 1 0 1];
+A_̄A = [1 0 1 0;
+       0 1 0 1];
 
-A_Cbar = [1 0 0 0;
-          0 1 0 0];
+A_̄C = [1 0 0 0;
+       0 1 0 0];
 
 A_B    = [0 0 1 0;
           0 0 0 1];
@@ -368,7 +416,7 @@ A_B    = [0 0 1 0;
 
 ```julia
 for ik in 0:I+K-2, jl in 0:J+L-2, k in max(0,ik-(I+K-2)):min(K-1,ik), l in max(0,jl-(J+L-2)):min(L-1,jl)
-    Abar[ik, jl] += Cbar[ik-k,jl-l]*B[k,l]
+  ̄A[ik, jl] += ̄C[ik-k,jl-l]*B[k,l]
 end
 U = [ 1 0 1 0    # [ i   = [ ik
       0 1 0 1    #   j       jl
@@ -491,3 +539,6 @@ Given `a`, `b`, `c`, and solve for `x`, `y`, `z`
 x == 1 => k = -a
 gcd(-ay+b, -az+c) = 1
 gcd(b, -az+c) = 1
+
+-->
+
