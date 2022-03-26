@@ -102,12 +102,13 @@ for some $\delta$.
 Is there some way we can find constraints on allowed values of $\alpha_{t}$ and $\vec{\beta}_{t}$?
 Enter Farkas' lemma!
 
-According to the affine form of Farkas' lemma as given in [Uday's thesis](https://www.csa.iisc.ac.in/~udayb/publications/uday-thesis.pdf), an affine function $\psi(\vec{x})$ is non-negative everywhere in $\mathcal{D}$ iff it is a non-negative linear combination of the faces:
+According to the affine form of Farkas' lemma as given in [Uday's thesis](https://www.csa.iisc.ac.in/~udayb/publications/uday-thesis.pdf), an affine function $\psi(\vec{x})$ is non-negative everywhere in a polyhedra $\mathcal{D}$ iff it is a non-negative linear combination of the faces:
 
 \begin{align}
 \psi\left(\vec{x}\right)&\equiv \lambda_0 + \vec{\lambda}^T_P\left(\vec{b} - \textbf{A}\vec{x}\right),
 \lambda_0\ge 0,\vec{\lambda}_P\ge 0.
 \end{align}
+That is, if some $\lambda_0\ge 0,\vec{\lambda}_P\ge 0$ exist such that the equality holds, then $\psi\left(\vec{x}\right)$ is non-negative everywhere inside the polyhedron.
 
 To apply that to our problem of dependence, we let
 \begin{align}
