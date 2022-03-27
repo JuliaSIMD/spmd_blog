@@ -1,7 +1,7 @@
 +++
 title = "Farkas' Coninued"
 hascode = true
-date = Date(2022, 3, 24)
+date = Date(2022, 3, 27)
 rss = "Discussion of Farkas Lemma with symbolic variables on either side-of-zero"
 +++
 
