@@ -10,13 +10,15 @@ rss = "This post gives a worked example of Farkas Lemma applied to loop optimiza
 Consider the loop
 ```julia
 for i = 0:I-1, j = 0:J-1
-	A[i+1,j+1] = A[i+1,j] + A[i,j+1]
+    A[i+1,j+1] = A[i+1,j] + A[i,j+1]
 end
 ```
 This loop is not trivial to paralellize, because we have dependencies on both the
 `i` and `j` loop. The store into `A[i+1,j+1]` will be loaded on the next iteration
 of the `j` loop by `A[i+1,j]`, and also by the next iteration of the `i` loop by
-`A[i,j+1]`.
+`A[i,j+1]`. Thus, we define the store into `A[i+1,j+1]` as the source, and the 
+subsequent loads from this memory location as the targets, that must hold the
+stored value.
 
 To try and optimize this loop nest, it would be helpful to have some means of modeling
 the dependencies. We can use dependency polyhedra.
