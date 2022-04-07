@@ -42,6 +42,43 @@ as a polyhedra that gives the space of all dependent iterations (note that we ca
 dependence by proving a depdendence polyehedra is empty, which we will demonstrate in a
 future blog post). 
 
+<!-- \begin{align} -->
+<!-- \begin{bmatrix} -->
+<!-- 1 & 0 & 0 & 0 & -1 & 0\\ -->
+<!-- -1 & 0 & 0 & 0 & 0 & 0\\ -->
+<!-- 0 & 1 & 0 & 0 & 0 & -1\\ -->
+<!-- 0 & -1 & 0 & 0 & 0 & 0\\ -->
+<!-- 0 & 0 & 1 & 0 & -1 & 0\\ -->
+<!-- 0 & 0 & -1 & 0 & 0 & 0\\ -->
+<!-- 0 & 0 & 0 & 1 & 0 & -1\\ -->
+<!-- 0 & 0 & 0 & -1 & 0 & 0\\ -->
+<!-- 1 & 0 & -1 & 0 & 0 & 0\\ -->
+<!-- -1 & 0 & 1 & 0 & 0 & 0\\ -->
+<!-- 0 & 1 & 0 & -1 & 0 & 0\\ -->
+<!-- 0 & -1 & 0 & 1 & 0 & 0\\ -->
+<!-- \end{bmatrix} -->
+<!-- \begin{bmatrix}i_s\\j_s\\i_t\\j_t\\I\\J\end{bmatrix} -->
+<!-- \le -->
+<!-- \begin{bmatrix}-1\\0\\-1\\0\\-1\\0\\-1\\0\\0\\0\\-1\\1\end{bmatrix} -->
+<!-- \end{align} -->
+
+<!-- pruning a few redundant bounds, we get -->
+<!-- \begin{align} -->
+<!-- \begin{bmatrix} -->
+<!-- 1 & 0 & 0 & 0 & -1 & 0\\ -->
+<!-- -1 & 0 & 0 & 0 & 0 & 0\\ -->
+<!-- 0 & 1 & 0 & 0 & 0 & -1\\ -->
+<!-- 0 & -1 & 0 & 0 & 0 & 0\\ -->
+<!-- 1 & 0 & -1 & 0 & 0 & 0\\ -->
+<!-- -1 & 0 & 1 & 0 & 0 & 0\\ -->
+<!-- 0 & 1 & 0 & -1 & 0 & 0\\ -->
+<!-- 0 & -1 & 0 & 1 & 0 & 0\\ -->
+<!-- \end{bmatrix} -->
+<!-- \begin{bmatrix}i_s\\j_s\\i_t\\j_t\\I\\J\end{bmatrix} -->
+<!-- \le -->
+<!-- \begin{bmatrix}-1\\0\\-2\\0\\0\\0\\-1\\1\end{bmatrix} -->
+<!-- \end{align} -->
+
 \begin{align}
 \begin{bmatrix}
 1 & 0 & 0 & 0\\
@@ -150,225 +187,94 @@ the induction variables:
 -\beta^l_{j_s} &= -\lambda_3 + \lambda_4 - \lambda_7 + \lambda_8\\
 \beta^l_{i_t} &= \lambda_5 - \lambda_6\\
 \beta^l_{j_t} &= \lambda_7 - \lambda_8\\
-\alpha^l_t - \alpha^l_s - \delta &= \lambda_0 + \lambda_1\left(I-1\right) + \lambda_3\left(J-2\right)
--\lambda_7+\lambda_8
+0 &= \lambda_1\\
+0 &= \lambda_3\\
+\alpha^l_t - \alpha^l_s - \delta &= \lambda_0 - \lambda_1 - 2\lambda_3 -\lambda_7+\lambda_8
 \end{align}
 Along with the inequalities that $\lambda_i\ge0, i = 0,\ldots,8$.
 
 We can perform a couple rounds of Gaussian elimination to simplify this to:
 \begin{align}
-\beta^l_{i_t}-\beta^l_{i_s} &= -\lambda_1 + \lambda_2\\
-\beta^l_{j_t}-\beta^l_{j_s} &= -\lambda_3 + \lambda_4\\
+\beta^l_{i_t}-\beta^l_{i_s} &= \lambda_2\\
+\beta^l_{j_t}-\beta^l_{j_s} &= \lambda_4\\
 \beta^l_{i_t} &= \lambda_5 - \lambda_6\\
 \beta^l_{j_t} &= \lambda_7 - \lambda_8\\
-\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta &= \lambda_0 + \lambda_1\left(I-1\right) + \lambda_3\left(J-2\right)
+\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta &= \lambda_0
 \end{align}
 Before proceding with Fourier-Motzkin elimination to eliminate the Fourier-Motzkin multipliers (the $\lambda$s).
 
 First to eliminate $\lambda_2$, we have the following inequalities including $\lambda_2$:
 \begin{align}
-\lambda_2 &\le \beta^l_{i_t}-\beta^l_{i_s} + \lambda_1\\
-\lambda_2 &\ge \beta^l_{i_t}-\beta^l_{i_s} + \lambda_1\\
+\lambda_2 &\le \beta^l_{i_t}-\beta^l_{i_s}\\
+\lambda_2 &\ge \beta^l_{i_t}-\beta^l_{i_s}\\
 \lambda_2 &\ge 0
 \end{align}
 Eliminating $\lambda_2$ produces
 \begin{align}
-\beta^l_{j_t}-\beta^l_{j_s} &= -\lambda_3 + \lambda_4\\
+\beta^l_{j_t}-\beta^l_{j_s} &= \lambda_4\\
 \beta^l_{i_t} &= \lambda_5 - \lambda_6\\
 \beta^l_{j_t} &= \lambda_7 - \lambda_8\\
-\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta &= \lambda_0 + \lambda_1\left(I-1\right) + \lambda_3\left(J-2\right)\\
-0 &\le \beta^l_{i_t}-\beta^l_{i_s} + \lambda_1\\
+\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta &= \lambda_0\\
+0 &\le \beta^l_{i_t}-\beta^l_{i_s}\\
 \lambda_0&\ge0\\
-\lambda_1&\ge0\\
-\lambda_3&\ge0\\
 \lambda_4&\ge0\\
 \lambda_5&\ge0\\
 \lambda_6&\ge0\\
 \lambda_7&\ge0\\
 \lambda_8&\ge0
 \end{align}
-We've dropped the inequality
+Similarly, eliminating $\lambda_0$, $\lambda_4$, $\lambda_5$, and $\lambda_7$, we have:
 \begin{align}
-\beta^l_{i_t}-\beta^l_{i_s} + \lambda_1 &\ge \beta^l_{i_t}-\beta^l_{i_s} + \lambda_1\\
-\end{align}
-as this simplifies to $0\ge0$. Eliminating $\lambda_4$ and $\lambda_5$, we have:
-\begin{align}
-\lambda_4 &\le \beta^l_{j_t}-\beta^l_{j_s} + \lambda_3\\
-\lambda_4 &\ge \beta^l_{j_t}-\beta^l_{j_s} + \lambda_3\\
+\lambda_4 &\le \beta^l_{j_t}-\beta^l_{j_s}\\
+\lambda_4 &\ge \beta^l_{j_t}-\beta^l_{j_s}\\
 \lambda_4 &\ge 0\\
 \lambda_5 &\le \beta^l_{i_t} + \lambda_6\\
 \lambda_5 &\ge \beta^l_{i_t} + \lambda_6\\
 \lambda_5 &\ge 0\\
+\lambda_7&\le \beta^l_{j_t} + \lambda_8\\
+\lambda_7&\ge \beta^l_{j_t} + \lambda_8\\
+\lambda_7&\ge 0\\
+\lambda_0 &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta\\
+\lambda_0 &\ge \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta\\
+\lambda_0&\ge 0
 \end{align}
 yielding
 \begin{align}
-\beta^l_{j_t} &= \lambda_7 - \lambda_8\\
-\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta &= \lambda_0 + \lambda_1\left(I-1\right) + \lambda_3\left(J-2\right)\\
-0 &\le \beta^l_{i_t}-\beta^l_{i_s} + \lambda_1\\
-0 &\le \beta^l_{j_t}-\beta^l_{j_s} + \lambda_3\\
-0 &\le  \beta^l_{i_t} + \lambda_6\\
-\lambda_0&\ge0\\
-\lambda_1&\ge0\\
-\lambda_3&\ge0\\
+0 &\le \beta^l_{j_t}-\beta^l_{j_s}\\
+0 &\le \beta^l_{i_t} + \lambda_6\\
+0 &\le \beta^l_{j_t} + \lambda_8\\
+0 &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta\\
+0 &\le \beta^l_{i_t}-\beta^l_{i_s}\\
 \lambda_6&\ge0\\
-\lambda_7&\ge0\\
 \lambda_8&\ge0
 \end{align}
-Eliminating $\lambda_0$ and $\lambda_6$:
+Finally, eliminating $\lambda_6$ and $\lambda_8$:
 \begin{align}
-\lambda_0&\le
-\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta - \lambda_1\left(I-1\right) - \lambda_3\left(J-2\right)\\
-\lambda_0&\ge\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta - \lambda_1\left(I-1\right) - \lambda_3\left(J-2\right)\\
-\lambda_0&\ge0\\
 \lambda_6 &\ge -\beta^l_{i_t}\\
 \lambda_6&\ge0\\
-\end{align}
-Producing
-\begin{align}
-\beta^l_{j_t} &= \lambda_7 - \lambda_8\\
-0 &\le \beta^l_{i_t}-\beta^l_{i_s} + \lambda_1\\
-0 &\le \beta^l_{j_t}-\beta^l_{j_s} + \lambda_3\\
-0 &\le
-\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta - \lambda_1\left(I-1\right) - \lambda_3\left(J-2\right)\\
-\lambda_1&\ge0\\
-\lambda_3&\ge0\\
-\lambda_7&\ge0\\
-\lambda_8&\ge0
-\end{align}
-
-Eliminating $\lambda_7$:
-\begin{align}
-\lambda_7&\le \beta^l_{j_t} + \lambda_8\\
-\lambda_7&\ge \beta^l_{j_t} + \lambda_8\\
-\lambda_7&\ge 0
-\end{align}
-Producing
-\begin{align}
-0 &\le \beta^l_{i_t}-\beta^l_{i_s} + \lambda_1\\
-0 &\le \beta^l_{j_t}-\beta^l_{j_s} + \lambda_3\\
-0 &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta - \lambda_1\left(I-1\right) - \lambda_3\left(J-2\right)\\
-0 &\le \beta^l_{j_t} + \lambda_8\\
-\lambda_1&\ge0\\
-\lambda_3&\ge0\\
-\lambda_8&\ge0
-\end{align}
-
-Eliminating $\lambda_8$:
-\begin{align}
 \lambda_8 &\ge - \beta^l_{j_t}\\
 \lambda_8&\ge0
 \end{align}
-it just drops out, yielding
+We realize we can just drop them.
+Thus, our final equations are
 \begin{align}
-0 &\le \beta^l_{i_t}-\beta^l_{i_s} + \lambda_1\\
-0 &\le \beta^l_{j_t}-\beta^l_{j_s} + \lambda_3\\
-0 &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta - \lambda_1\left(I-1\right) - \lambda_3\left(J-2\right)\\
-\lambda_1&\ge0\\
-\lambda_3&\ge0\\
+\beta^l_{j_s} &\le \beta^l_{j_t}\\
+\beta^l_{i_s} &\le \beta^l_{i_t}\\
+\delta &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s\\
 \end{align}
 
-Eliminating $\lambda_1$, noting that we can assume $I >= 1$, meaning either $I-1>0$ or $I-1==0$.
-\begin{align}
-\lambda_1\left(I-1\right) &\le
-\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta - \lambda_3\left(J-2\right)\\
-\lambda_1 &\ge -\left(\beta^l_{i_t}+\beta^l_{i_s}\right)\\
-\lambda_1&\ge0\\
-\end{align}
-we get
-\begin{align}
-0 &\le \beta^l_{j_t}-\beta^l_{j_s} + \lambda_3\\
-\lambda_3&\ge0\\
-0 &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta - \lambda_3\left(J-2\right)\\
-0 &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta - \lambda_3\left(J-2\right)
-+\left(I-1\right)\left(\beta^l_{i_t}-\beta^l_{i_s}\right)
-\\
-\end{align}
-If we assume $I-1==0$, the last equation becomes redundant. We do not need to represent this special case separately.
+Thus, the coefficient for the target must be at least as great as those from the source.
+Additionally, if the offsets are equal, then $\beta^l_{j_t}$ must exceed our desired $\delta$.
 
-We can also assume that $J >= 2$, as if $J<=1$, our dependence polyhedra is empty (we have $0<=j_s<=J-2$), meaning there are no constraints that must be satisfied.
-Finally, eliminating $\lambda_3$, we have
+Running through this on the other dependency would similary yield 
 \begin{align}
-\lambda_3\left(J-2\right) &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta\\
-\lambda_3\left(J-2\right) &\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta
-+\left(I-1\right)\left(\beta^l_{i_t}-\beta^l_{i_s}\right)
-\\
-\lambda_3&\ge0\\
-\lambda_3&\ge\beta^l_{j_s}-\beta^l_{j_t}
-\end{align}
-yielding
-\begin{align}
-0&\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta\\
-0&\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta
-+\left(I-1\right)\left(\beta^l_{i_t}-\beta^l_{i_s}\right)
-\\
-\left(J-2\right)\left(
-\beta^l_{j_s}-\beta^l_{j_t}\right)
-&\le\beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta\\
-\left(J-2\right)\left(
-\beta^l_{j_s}-\beta^l_{j_t}\right)
-&\le \beta^l_{j_t} + \alpha^l_t - \alpha^l_s - \delta
-+\left(I-1\right)\left(\beta^l_{i_t}-\beta^l_{i_s}\right)
-\\
-\end{align}
-Focusing only on this dependency, we see for example that if we want 
-$\beta^l_{i_t} = \beta^l_{i_s}$ and $\beta^l_{j_t} = \beta^l_{j_s}$, then the system simplifies to
-\begin{align}
-\beta^l_{j_t} &\ge \delta + \alpha^l_s - \alpha^l_t
-\end{align}
-If this were the only dependency, e.g. if the loop was
-```julia
-for i = 0:I-1, j = 0:J-1
-	A[i+1,j+1] = f(A[i+1,j])
-end
-```
-this tells us that we can satisfy the dependency at level 0 via setting
-
-\begin{align}
-\alpha^0_s &= \alpha^0_t = 0\\
-\beta^0_{i_s} &= \beta^0_{i_t} = 0\\
-\beta^0_{j_s} &= \beta^0_{j_t} = 1\\
-\end{align}
-which would satisfy $\delta=1$ because $1 \ge 1 + 0 - 0$, allowing us to parallelize the inner loop (over $i$).
-
-However, in the motivating example, we have a second dependency. We can produce its constraints similarly, referring to the second target as $u$:
-\begin{align}
-0&\le \beta^l_{i_u} + \alpha^l_u - \alpha^l_s - \delta\\
-0&\le \beta^l_{i_u} + \alpha^l_u - \alpha^l_s - \delta
-+\left(I-1\right)\left(\beta^l_{j_u}-\beta^l_{j_s}\right)
-\\
-\left(J-2\right)\left(
-\beta^l_{i_s}-\beta^l_{i_u}\right)
-&\le\beta^l_{i_u} + \alpha^l_u - \alpha^l_s - \delta\\
-\left(J-2\right)\left(
-\beta^l_{i_s}-\beta^l_{i_u}\right)
-&\le \beta^l_{i_u} + \alpha^l_u - \alpha^l_s - \delta
-+\left(I-1\right)\left(\beta^l_{j_u}-\beta^l_{j_s}\right)
-\\
-\end{align}
-If we'd like to parallelize the inner loop via satisfying the dependency at the outer level (i.e., $\delta >= 1$ to satisfy a dependency), we can do so via the schedule
-\begin{align}
-\alpha^0_s &= \alpha^0_t = \alpha^0_u = 0\\
-\beta^0_{i_t} &= \beta^0_{i_t} = \beta^0_{i_u} = 1\\
-\beta^0_{j_s} &= \beta^0_{j_t} = \beta^0_{j_u} = 1\\
-\end{align}
-and then we can use
-\begin{align}
-\alpha^1_s &= \alpha^1_t = \alpha^1_u = 0\\
-\beta^1_{i_t} &= \beta^1_{i_t} = \beta^1_{i_u} = 1\\
-\beta^1_{j_s} &= \beta^1_{j_t} = \beta^1_{j_u} = 0\\
-\end{align}
-for the inner loop, and freely paralelize it.
-
-Of course, note that our loop bounds change. As a final observation, note that our matrix $\boldsymbol{\beta}$ is unimodular, with determinant $-1$.
-\begin{align}
-\boldsymbol{\beta} &=
-\begin{bmatrix}
-1 & 1\\
-1 & 0
-\end{bmatrix}\\
-\left|\boldsymbol{\beta}\right| &= -1.
+\beta^l_{j_s} &\le \beta^l_{j_t}\\
+\beta^l_{i_s} &\le \beta^l_{i_t}\\
+\delta &\le \beta^l_{i_t} + \alpha^l_t - \alpha^l_s\\
 \end{align}
 
+Note that to parallelize a hyperplane, we need $\delta$ for all unsatisfied dependencies to be 0.
+One approach is to let $\beta^0_{i_t} = \beta^0_{i_s} = \beta^0_{j_t} = \beta^0_{j_s} = 1$, to satisfy both dependencies in the outer loop. Then we can freely parallelize the inner loop.
 
 Reference: [Effective Automatic Parallelization and Locality Optimization using the Polyehdral Model by Uday Bondhugula](https://www.csa.iisc.ac.in/~udayb/publications/uday-thesis.pdf).
 
