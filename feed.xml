@@ -66,7 +66,7 @@
   <link> https://spmd.org/posts/unimodular/index.html </link>
   <guid> https://spmd.org/posts/unimodular/index.html </guid>
   <description>
-    <![CDATA[  This post goes over the significance of unimodular matrices in the context of loop optimizations  ]]>
+    <![CDATA[  The significance of unimodular matrices in the context of loop optimizations  ]]>
   </description>  
     
   <pubDate>Wed, 02 Mar 2022 00:00:00 +0000</pubDate>  
