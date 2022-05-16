@@ -1,16 +1,17 @@
 +++
-title = "Orthogonalize Indexes"
+title = "Orthogonalize Indices"
 hascode = true
 date = Date(2022, 3, 14)
-rss = "This post goes over the significance of unimodular matrices in the
-context of loop optimizations"
+rss = "The significance of unimodular matrices in the context of loop optimizations"
 +++
 
 @def tags = ["unimodular", "loop-transformations"]
 
-In a convolutional neural network, we are likely to have the following two
-pieces of code, calculating the forward pass, and then the revese pass for
-calculating the gradient with respect to `A`.
+The convolution operation $C = A * B$ is key to many signal processing applications.
+When used in a convolutional neural network, backpropagation also requires the calculation
+of the gradient of the convolution with respect to its arguments during the 'reverse pass'.
+Ignoring differentiation with respect to `B`, let's take `conv!` and `convpullback!`
+as representatives of the forward and reverse passes for convolution.
 ```julia-repl
 julia> using OffsetArrays
 
@@ -38,26 +39,21 @@ julia> function convpullback!(_Ā, _B, _C̄)
     return Ā
 end
 ```
-We left off the code for the reverse pass with respect to `B`, as it doesn't
-feature the problem this blog post focuses on solving: 
-```julia
-Ā[m + i, n + j] += 
-```
 
 While the forward pass is easy to optimize via register tiling, this is not
 the case for the pullback: the index into $\bar{A}$ is dependent on all four loop
 induction variables, making it impossible to hoist these loads and stores
-out of any loops, forcing us to reload and restore memory on every iteration,
-meaning it takes many times more CPU instructions to evaluate.
+out of any loops. This forces us to re-load and re-store memory on every iteration,
+requiring several additional CPU instructions per multiplication.
 
-I'll add a post detailing register tiling, but for now just note that asside from
+I'll add a post detailing register tiling, but for now just note that aside from
 reducing the loads and stores to $\bar{A}$ by factors equal to the loops they're 
-hoisted out of, it would also results in several times fewer loads from `B` and
+hoisted out of, tiling also results in several times fewer loads from `B` and
 from $\bar{C}$, enabling code to start attaining significant fractions of peak flops.
-An order of magnitude difference in performance is often a fair ballpark for
-the benefit of register tiling.
+This reduced demand on memory bandwidth can deliver performance gains of about an
+order of magnitude in typical cases.
 
-So, now the question that's the focus of this post: can we re-index the memory
+Now onto this post's core question: can we re-index the memory
 accesses so that $\bar{A}$ is dependent on only two loops?
 That is, we want to produce a new set of loops that looks more like
 ```julia
@@ -69,24 +65,24 @@ for w in W, x in X
     Ā[w, x] = Āwx
 end
 ```
-which would allow us to register tile. If we can, what are the new ranges
+allowing a register-efficient tiled access pattern. If we can, what are the new ranges
 `W`, `X`, `Y`, and `Z`, and what are the new indices into `B` and $\bar{C}$?
 Can we develop a general algorithm?
 
 Often, a human can look at a problem and reason their way to a solution without
-too much difficulty. While our goal is to create a general algorithm to remove
-the need for expert human intervention (especially to enable codegen tools like
-reverse diff on loops to be produce optimal code; it is an express goal that
-naive loops + an AD tool like [Enzyme](https://github.com/EnzymeAD/Enzyme) + the new LoopVectorization
-will achieve or best state of the art performance across a wide range of loops),
-I find this is a useful starting point for building an intuition of the problem,
+too much difficulty. However, our goal is to create a general algorithm to remove
+the need for expert human intervention. Ultimately, this should allow machine generation
+of optimal code even for challenging cases like reverse-mode automatic differentiation
+of expressions containing loops. Starting from a forward pass written with naive loops,
+it is an express goal that an AD tool like [Enzyme](https://github.com/EnzymeAD/Enzyme) + the new LoopVectorization
+will deliver performance which matches or beats the state of the art across a wide range of loops.
+That said, human reasoning is a useful starting point for building an intuition of the problem,
 which in turn can help point to general algorithms.
 
-We want to set `w = m + i`, and `x = n + j`, thus `W` must iterate over the full
+We want to set `w = m + i` and `x = n + j`, so `W` must iterate over the full
 range of values attained by `m + i`, i.e. `w = 0:M+N-2`, and `x = 0:N+J-2`.
-We may now naively try setting the indices of `B[i,j]` to `B[y,z]` and working
-through the implications; what would this imply about the indicesof $\bar{C}$, and
-about the ranges `Y` and `Z`?
+We might naively set the indices of `B[i,j]` to `B[y,z]`; what would this 
+imply about the indices of $\bar{C}$, and about the ranges `Y` and `Z`?
 
 First, it's straightforward to find that we must have `C̄[w-y, x-z]`, as
 `m = w - i = w - y`, and we can prove `n` similarly.
@@ -98,7 +94,7 @@ the intersection yields `max(0, w - (M-1)) <= y <= min(I-1, w)`.
 We can apply the same argument for `z` to produce the bounds
 `max(0, x - (N-1)) <= z <= min(J-1, x)`.
 
-To make this algorithmic, we represent the loop bounds via a system of
+To treat this algorithmically, we represent the loop bounds via a system of
 inequalities:
 ```julia
 [ 1  0  0  0    [ m         [ M-1
@@ -142,7 +138,7 @@ are evaluated. We will discuss affine schedules in much greater detail in a futu
 post.)
 
 
-This means that all we have left to do is actually find the matrix $K$.
+The only remaining task is finding the matrix $K$.
 As $K$ must be both an integer matrix and invertible, it is unimodular.
 As the first two rows of $\textbf{XK}$ correspond to the identity matrix,
 we know the first two rows of $X$ equal the first two rows of $\textbf{K}^{-1}$.
@@ -150,14 +146,14 @@ we know the first two rows of $X$ equal the first two rows of $\textbf{K}^{-1}$.
 From here, we realize that we can find such a matrix by modifying the algorithms
 typically used to bring matrices into reduced forms, such as reduced echelon form
 or the Hermite normal form. We can use column pivots and row additions (using 
-integer multipliers), as these preserve the determinant and maintain the status
-as an integer matrix).
+integer multipliers), as these preserve the determinant and maintain classification
+as an integer matrix.
 We diagonalize one row at a time. When we encounter a row we cannot diagonalize, that 
 means this index cannot produce a unimodular matrix in combination with the preceding
-indices, thus we reject it and move on to the next index. In this way our matrix $\textbf{K}^{-1}$
+indices, so we reject it and move on to the next index. In this way our matrix $\textbf{K}^{-1}$
 can be a subset of up to `size(X,2)` rows of $\textbf{X}$, not just the first two.
 The important characteristics here are that it allows us to choose which indices to
-prioritize -- e.g. those that would enable register tiling -- while still simplifying/
+prioritize -- e.g. those that would enable register tiling -- while still simplifying or 
 maintaining simplicity in some other indices.
 If we run out of rows of $\textbf{X}$, then the algorithm will still succeed, but then
 $\textbf{K}^{-1}$ will include rows not present in $\textbf{X}$.
@@ -203,11 +199,11 @@ ArrayReference 2 (dim = 2):
 { Induction Variable: 0 } - { Induction Variable: 2 }
  ( M )  * ({ Induction Variable: 1 } - { Induction Variable: 3 })
 ```
-Our desired/expected outcome. We can now register tile the loop.
+This is the desired/expected outcome. We can now register-tile the loop.
 
 
 
-Now let us move to a more artificial example, a deliberately badly written matrix-multiply:
+Now let us move to a more artificial example, a (deliberately) badly-written matrix-multiply:
 ```julia-repl
 julia> using OffsetArrays
 
@@ -279,8 +275,8 @@ ArrayReference 2 (dim = 2):
 { Induction Variable: 2 }
  ( M )  * ({ Induction Variable: 1 })
 ```
-Recovering a perfectly-normal tripple-loop matrix multiply, that is straightforward to
-optimize via register and cache tiling.
+We recover a perfectly-normal triple-loop matrix multiplication 
+which can be straightforwardly optimized via register and cache tiling.
 
 <!---
 Let `L` be the vector of loop ind vars, so `L = [i, l, j]`, and `I_{X}` be the
