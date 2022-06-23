@@ -39,42 +39,4 @@
   </atom:author>
         
 </item>
-
-<item>
-  <title>
-    <![CDATA[  Farkas&#39; Lemma  ]]>
-  </title>
-  <link> https://spmd.org/posts/farkas_lemma/index.html </link>
-  <guid> https://spmd.org/posts/farkas_lemma/index.html </guid>
-  <description>
-    <![CDATA[  This post gives a worked example of Farkas&#39; Lemma applied to loop optimization  ]]>
-  </description>  
-    
-  <pubDate>Thu, 24 Mar 2022 00:00:00 +0000</pubDate>  
-  
-  
-  <atom:author>
-    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
-  </atom:author>
-        
-</item>
-
-<item>
-  <title>
-    <![CDATA[  Orthogonalize Indices  ]]>
-  </title>
-  <link> https://spmd.org/posts/orthogonalizing_loops/index.html </link>
-  <guid> https://spmd.org/posts/orthogonalizing_loops/index.html </guid>
-  <description>
-    <![CDATA[  The significance of unimodular matrices in the context of loop optimizations  ]]>
-  </description>  
-    
-  <pubDate>Mon, 14 Mar 2022 00:00:00 +0000</pubDate>  
-  
-  
-  <atom:author>
-    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
-  </atom:author>
-        
-</item>
 </channel></rss>
