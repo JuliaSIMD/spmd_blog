@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<rss version="2.0"
+  xmlns:content="http://purl.org/rss/1.0/modules/content/"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:media="http://search.yahoo.com/mrss/"
+  xmlns:atom="http://www.w3.org/2005/Atom"
+  xmlns:georss="http://www.georss.org/georss">
+
+  <channel>
+    <title>
+      <![CDATA[  SPMD optimizing compiler development  ]]>
+    </title>
+    <link> https://spmd.org </link>
+    <description>
+      <![CDATA[  A journey on writing optimizing loop compiler passes  ]]>
+    </description>
+    <atom:link
+      href="https://spmd.org/feed.xml"
+      rel="self"
+      type="application/rss+xml" />
+
+
+<item>
+  <title>
+    <![CDATA[  Ordering  ]]>
+  </title>
+  <link> https://spmd.org/posts/ordering/index.html </link>
+  <guid> https://spmd.org/posts/ordering/index.html </guid>
+  <description>
+    <![CDATA[  This post describes an algorithm for answering ordering queries  ]]>
+  </description>  
+    
+  <pubDate>Wed, 13 Jul 2022 00:00:00 +0000</pubDate>  
+  
+  
+  <atom:author>
+    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
+  </atom:author>
+        
+</item>
+</channel></rss>
