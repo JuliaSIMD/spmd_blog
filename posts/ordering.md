@@ -27,8 +27,8 @@ Secondarily, equalities are much easier to work with than inequalities. Thus, we
 \begin{bmatrix}
 -1 & 0 & 1 & 0 & 0 & -1 & 0 & 0 & 0\\
 0 & -1 & 1 & 0 & 0 & 0 & -1 & 0 & 0\\
-0 & 0 & 1 & 1 & 0 & 0 & 0 & 1 & 0\\
-0 & 0 & 1 & 0 & 1 & 0 & 0 & 0 & 1\\
+0 & 0 & 1 & -1 & 0 & 0 & 0 & 1 & 0\\
+0 & 0 & 1 & 0 & -1 & 0 & 0 & 0 & 1\\
 \end{bmatrix}
 \begin{bmatrix}
 a\\b\\m\\x\\y\\s_0\\s_1\\s_2\\s_3
