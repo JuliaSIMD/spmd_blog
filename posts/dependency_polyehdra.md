@@ -143,7 +143,7 @@ precedes the store.
 Now, let's consider repeated memory accesses across time.
 ```julia
 for i = 0:I-1, j = 0:J-1, k = 0:K-1
-    A[i+j, j+k] = foo(A[i+j, j+k])
+    A[i+j, j+k, i-k] = foo(A[i+j, j+k, i-k])
 end
 ```
 We can represent the mapping of loop induction variables to array memory
@@ -159,8 +159,9 @@ known fact: it also happens to have a bit of differential equation handling code
 ```julia
 julia> using ModelingToolkit
 
-julia> A = [1 1 0
-            0 1 1];
+julia> A = [1  1  0
+            0  1  1
+			1  0 -1];
 
 julia> ModelingToolkit.nullspace(A)
 3×1 Matrix{Int64}:
@@ -175,8 +176,68 @@ constant, in what direction does $-i + j -k$ change?
 We need to know that to place constraints indicating whether one time is before
 or after the other.
 
-Trying to take the same approach as above...
+We can solve this via applying the same approach as above. We first get the direction of the dependencies when time is equal across both. Then, we pick one of the two directions, and see if the constraints assuming the reverse direction are satisfied. If they are, the direction was correct, else the time vector goes in the opposite direction.
 
+Equality constraint simplification can remove any clear correspondence between constraints and time dimensions, thus results are not necessarilly easily interpretable. But the following list of citations suggests readers love lots of mathy output regardless of interpretability or context, so I'm presenting results anyway:
+
+For the forward direction, the dependecy polyhedra:
+$
+-i_l - 2k_l + i_s + 2k_s = 0
+-j_l - k_l + j_s + k_s = 0
+-3k_l + 3k_s = 0
+$
+
+Schedule Constraints:
+-v_1 + v_4 <= 0
+-v_2 + v_5 <= 0
+-v_0 + v_3 <= 0
+-v_6 == 0
+
+Bounding Constraints:
+-v_7 <= 0
+-v_8 <= 0
+-v_9 <= 0
+-v_10 <= 0
+v_2 - v_5 - v_10 <= 0
+v_0 - v_3 - v_8 <= 0
+v_1 - v_4 - v_9 <= 0
+-v_6 == 0
+
+
+Reverse:
+Dependence Poly x -> y:
+v_0 <=  ( M - 1 )
+-v_0 <= 0
+v_1 <=  ( N - 1 )
+-v_1 <= 0
+v_2 <=  ( O - 1 )
+-v_2 <= 0
+v_3 <=  ( M - 1 )
+-v_3 <= 0
+v_4 <=  ( N - 1 )
+-v_4 <= 0
+v_5 <=  ( O - 1 )
+-v_5 <= 0
+-v_0 - 2v_2 + v_3 + 2v_5 == -1
+-v_1 - v_2 + v_4 + v_5 == 0
+-3v_2 + 3v_5 == -1
+
+Schedule Constraints:
+v_2 - v_5 <= 0
+v_0 - v_3 <= 0
+v_1 - v_4 <= 0
+-v_6 == 0
+
+Bounding Constraints:
+-v_7 <= 0
+-v_8 <= 0
+-v_9 <= 0
+-v_10 <= 0
+-v_0 + v_3 - v_8 <= 0
+-v_1 + v_4 - v_9 <= 0
+-v_2 + v_5 - v_10 <= 0
+-v_6 == 0
+$
 
 
 

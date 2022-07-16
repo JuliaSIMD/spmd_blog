@@ -278,6 +278,8 @@ ArrayReference 2 (dim = 2):
 We recover a perfectly-normal triple-loop matrix multiplication 
 which can be straightforwardly optimized via register and cache tiling.
 
+Once we get such a solution, we can test if it is satisfiable with respect to the dependency constraints. If so, we can add them as constraints before running the ILP solver to produce a schedule.
+
 <!---
 Let `L` be the vector of loop ind vars, so `L = [i, l, j]`, and `I_{X}` be the
 set of indices for array `{X}`. Then let `I_{X} = A_{X} * L`
