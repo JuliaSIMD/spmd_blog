@@ -186,7 +186,7 @@ $
 -j_l - k_l + j_s + k_s = 0
 -3k_l + 3k_s = 0
 $
-
+```
 Schedule Constraints:
 -v_1 + v_4 <= 0
 -v_2 + v_5 <= 0
@@ -237,7 +237,7 @@ Bounding Constraints:
 -v_1 + v_4 - v_9 <= 0
 -v_2 + v_5 - v_10 <= 0
 -v_6 == 0
-$
+```
 
 
 
