@@ -56,8 +56,8 @@ Now, to isolate our query, we have the problem
 -1 & 0 & 0 & 0\\
 0 & -1 & 0 & 0\\
 1 & 1 & 1 & 1\\
-0 & 0 & 1 & 0\\
-0 & 0 & 0 & 1\\
+0 & 0 & -1 & 0\\
+0 & 0 & 0 & -1\\
 -1 & 0 & 0 & 0\\
 0 & -1 & 0 & 0\\
 0 & 0 & 1 & 0\\
@@ -83,8 +83,8 @@ To assist us in this quest, we add augment colums and set $\textbf{z}=\textbf{0}
 -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0\\
 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0\\
 1 & 1 & 1 & 1 & 0 & 0 & 0 & 0\\
-0 & 0 & 1 & 0 & 0 & 0 & 0 & 0\\
-0 & 0 & 0 & 1 & 0 & 0 & 0 & 0\\
+0 & 0 & -1 & 0 & 0 & 0 & 0 & 0\\
+0 & 0 & 0 & -1 & 0 & 0 & 0 & 0\\
 -1 & 0 & 0 & 0 & 1 & 0 & 0 & 0\\
 0 & -1 & 0 & 0 & 0 & 1 & 0 & 0\\
 0 & 0 & 1 & 0 & 0 & 0 & 1 & 0\\
@@ -167,7 +167,7 @@ As $\textbf{V}_2$ is the nullspace of $\textbf{H}$, $\textbf{y}_2$ can moves thr
 Now, recognizing that we need the last $E$ entries of $\textbf{x}$ to be $\ge 0$ but don't care about the first $V$ elements, we left-multiply by
 
 \begin{equation}
-\textbf{J} = \begin{bmatrix}\textbf{0}_{E\times V}&\textbf{I}_{E\times E}\end{bmatrix}
+\textbf{J} = \begin{bmatrix}\textbf{0}_{E\times E}&\textbf{I}_{E\times E}\end{bmatrix}
 \end{equation}
 
 to discard the elements of $\textbf{x}$ we aren't interested in. For simplicity, let
