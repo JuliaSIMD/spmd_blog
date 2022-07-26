@@ -176,14 +176,14 @@ to discard the elements of $\textbf{x}$ we aren't interested in. For simplicity,
 \textbf{x}^* &= \textbf{Jx}\\
 \textbf{c} &= \textbf{JV}_1\textbf{D}^{-1}\textbf{b}\\
 \textbf{W} &= -\textbf{JV}_2\\
-\textbf{x}^* &= c - \textbf{Wy}_2
+\textbf{x}^* &= \textbf{c} - \textbf{Wy}_2
 \end{align}
 
 Now, as what we need is $\textbf{x}^*\ge 0$
 
 \begin{align}
-\textbf{0} &\le c - \textbf{Wy}_2\\
-\textbf{Wy}_2 &\le c\\
+\textbf{0} &\le \textbf{c} - \textbf{Wy}_2\\
+\textbf{Wy}_2 &\le \textbf{c}\\
 \end{align}
 
 
