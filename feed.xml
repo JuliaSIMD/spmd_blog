@@ -23,6 +23,25 @@
 
 <item>
   <title>
+    <![CDATA[  Dependency Analysis of Julia Loops Example  ]]>
+  </title>
+  <link> https://spmd.org/posts/dependency_analysis_example/index.html </link>
+  <guid> https://spmd.org/posts/dependency_analysis_example/index.html </guid>
+  <description>
+    <![CDATA[  Example of running dependence analysis on Julia loops  ]]>
+  </description>  
+    
+  <pubDate>Sun, 13 Nov 2022 00:00:00 +0000</pubDate>  
+  
+  
+  <atom:author>
+    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
+  </atom:author>
+        
+</item>
+
+<item>
+  <title>
     <![CDATA[  Ordering  ]]>
   </title>
   <link> https://spmd.org/posts/ordering/index.html </link>
