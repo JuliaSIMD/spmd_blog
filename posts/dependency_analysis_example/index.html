@@ -291,7 +291,7 @@ L<span class=hljs-number >163</span>:                                           
 }</code></pre> <p>Now you can clone LoopModels, and once you&#39;ve installed all the dependencies:</p> <pre><code class="sh hljs">CC_LD=lld CXX_LD=lld CXXFLAGS=<span class=hljs-string >&quot;&quot;</span> meson setup builddir -Db_santize=address -Db_coverage=<span class=hljs-literal >true</span>
 <span class=hljs-built_in >cd</span> builddir
 meson compile TurboLoop
-opt -mcpu=native --disable-output --load-pass-plugin=/home/chriselrod/Documents/progwork/cxx/LoopModels/builddir/libTurboLoop.so --passes=<span class=hljs-string >&quot;function(turbo-loop)&quot;</span> /home/chriselrod/Documents/progwork/cxx/LoopPlayground/LoopInductTests/test/triangular_solve.ll</code></pre> <p>You&#39;ll have to substitute the path to the <code>libTurboLoop.so</code> plugin and to the <code>triangular_solve.ll</code> as appropriate. The output is currently extremely verbose, and it does not yet actually transform the code or perform cost modeling, unrolling, or vectorization analysis. But it does perform some dependence analysis; sample output from the above:</p> <pre><code class="julia hljs">LoopBlock graph:
+opt -mcpu=native --disable-output --load-pass-plugin=/home/chriselrod/Documents/progwork/cxx/LoopModels/builddir/libTurboLoop.so --passes=<span class=hljs-string >&quot;function(turbo-loop)&quot;</span> /home/chriselrod/Documents/progwork/cxx/LoopPlayground/LoopInductTests/test/triangular_solve.ll</code></pre> <p>You&#39;ll have to substitute the path to the <code>libTurboLoop.so</code> plugin and to the <code>triangular_solve.ll</code> as appropriate. The output is currently extremely verbose, and it does not yet actually transform the code or perform cost modeling, unrolling, or vectorization analysis. But it does perform some dependence analysis; sample output from the above:</p> <pre><code class="julia hljs">LoopBlock graph (<span class=hljs-comment >#nodes = 3):</span>
 v_0:
 mem =
   %<span class=hljs-number >64</span> = load double, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >63</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >57</span>, !tbaa !<span class=hljs-number >61</span>
@@ -305,20 +305,19 @@ mem =
   %<span class=hljs-number >75</span> = load double, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >74</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >68</span>, !tbaa !<span class=hljs-number >61</span>
   store double %<span class=hljs-number >76</span>, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >70</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >73</span>, !tbaa !<span class=hljs-number >61</span>
 inNeighbors = v_0, v_1, v_2,
-outNeighbors = v_1,
+outNeighbors = v_1, v_2,
 
 v_2:
 mem =
-  %<span class=hljs-number >71</span> = load double, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >70</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >68</span>, !tbaa !<span class=hljs-number >61</span>
-  %<span class=hljs-number >75</span> = load double, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >74</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >68</span>, !tbaa !<span class=hljs-number >61</span>
+  store double %<span class=hljs-number >76</span>, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >70</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >73</span>, !tbaa !<span class=hljs-number >61</span>
   %<span class=hljs-number >83</span> = load double, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >82</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >91</span>, !tbaa !<span class=hljs-number >61</span>
   %<span class=hljs-number >87</span> = load double, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >86</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >91</span>, !tbaa !<span class=hljs-number >61</span>
   store double %<span class=hljs-number >89</span>, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >82</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >97</span>, !tbaa !<span class=hljs-number >61</span>
-inNeighbors = v_0, v_2,
+inNeighbors = v_0, v_1, v_2,
 outNeighbors = v_1, v_2,
 
 
-LoopBlock Edges:
+LoopBlock Edges (<span class=hljs-comment >#edges = 10):</span>
         Edge = Dependence Poly y -&gt; x:
 v_2 &lt;= -<span class=hljs-number >1</span> + %<span class=hljs-number >23</span>
 v_3 &lt;= -<span class=hljs-number >1</span> + %<span class=hljs-number >20</span>
@@ -426,7 +425,7 @@ s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-numbe
 s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
 
 Schedule Out:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>]; ref = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
@@ -437,22 +436,7 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-
-Schedule Out:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
-[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
-ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
-A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
-Sizes: [ unknown, %<span class=hljs-number >20</span> ]
-Subscripts: [ i_1 , i_0 ]
-s.getPhi()
-[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
-s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
 
         Edge = Dependence Poly y -&gt; x:
 v_2 &lt;= -<span class=hljs-number >1</span> + %<span class=hljs-number >23</span>
@@ -561,7 +545,7 @@ s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-numbe
 s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
 
 Schedule Out:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>]; ref = ar.indexMatrix() =
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
@@ -572,7 +556,22 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
+
+Schedule Out:
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
+[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
+ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
+A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
+Sizes: [ unknown, %<span class=hljs-number >20</span> ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
+s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
         Edge = Dependence Poly y -&gt; x:
 v_2 &lt;= -<span class=hljs-number >1</span> + %<span class=hljs-number >23</span>
@@ -667,33 +666,6 @@ Loop <span class=hljs-number >0</span> upper bounds:
 i_0 &lt;= -<span class=hljs-number >1</span> + %<span class=hljs-number >20</span>
 
 Schedule In:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
-[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
-ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
-A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
-Sizes: [ unknown, %<span class=hljs-number >20</span> ]
-Subscripts: [ i_1 , i_0 ]
-s.getPhi()
-[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
-s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]Schedule In:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
-[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
-ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
-A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
-Sizes: [ unknown, %<span class=hljs-number >20</span> ]
-Subscripts: [ i_1 , i_0 ]
-s.getPhi()
-[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
-s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-
-Schedule Out:
 nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>]; ref = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
@@ -705,7 +677,36 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
+
+Schedule Out:
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
+[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
+ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
+A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
+Sizes: [ unknown, %<span class=hljs-number >20</span> ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
+s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
+
+Schedule Out:
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
+[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
+ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
+A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
+Sizes: [ unknown, %<span class=hljs-number >20</span> ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
+s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
         Edge = Dependence Poly y -&gt; x:
 -v_0 - v_1 + v_3 + v_4 &lt;= <span class=hljs-number >0</span> + %<span class=hljs-number >20</span>
@@ -836,7 +837,7 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
@@ -955,12 +956,12 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
 Schedule Out:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>]; ref = ar.indexMatrix() =
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
@@ -971,7 +972,22 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
+
+Schedule Out:
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
+[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
+ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
+A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
+Sizes: [ unknown, %<span class=hljs-number >20</span> ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
+s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
         Edge = Dependence Poly y -&gt; x:
 -v_0 - v_1 + v_3 + v_4 &lt;= <span class=hljs-number >0</span> + %<span class=hljs-number >20</span>
@@ -1102,7 +1118,7 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
@@ -1221,12 +1237,12 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
 Schedule Out:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>]; ref = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
@@ -1237,22 +1253,7 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-
-Schedule Out:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
-[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
-ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
-A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
-Sizes: [ unknown, %<span class=hljs-number >20</span> ]
-Subscripts: [ i_1 , i_0 ]
-s.getPhi()
-[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
-s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
 
         Edge = Dependence Poly x -&gt; y:
 -v_0 - v_1 + v_3 + v_4 &lt;= <span class=hljs-number >0</span> + %<span class=hljs-number >20</span>
@@ -1369,12 +1370,12 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
 Schedule Out:
-nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>]; ref = ar.indexMatrix() =
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
@@ -1385,7 +1386,22 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
+
+Schedule Out:
+nodeIndex = <span class=hljs-built_in >BitSet</span>[<span class=hljs-number >1</span>, <span class=hljs-number >2</span>]; ref = ar.indexMatrix() =
+[  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
+ArrayReference %<span class=hljs-number >55</span> (dim = <span class=hljs-number >2</span>, num loops: <span class=hljs-number >2</span>, element size: <span class=hljs-number >8</span>):
+A.numRow() = <span class=hljs-number >2</span>; A.numCol() = <span class=hljs-number >2</span>
+Sizes: [ unknown, %<span class=hljs-number >20</span> ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
+s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
         Edge = Dependence Poly y -&gt; x:
 v_5 &lt;= -<span class=hljs-number >1</span> + %<span class=hljs-number >20</span>
@@ -1517,7 +1533,7 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
@@ -1533,7 +1549,7 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
@@ -1667,7 +1683,7 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
@@ -1683,12 +1699,12 @@ Subscripts: [ i_1  + i_2  + <span class=hljs-number >1</span>, i_0 ]
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 
 
-LoopBlock schedule:
+LoopBlock schedule (<span class=hljs-comment >#mem accesses = 8):</span>
 
 <span class=hljs-built_in >Ref</span> = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
@@ -1728,15 +1744,7 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-
-nodeIndex = <span class=hljs-number >2</span>
-s.getPhi()
-[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
-s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
 <span class=hljs-built_in >Ref</span> = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span> ]
@@ -1749,15 +1757,7 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-
-nodeIndex = <span class=hljs-number >2</span>
-s.getPhi()
-[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
-   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
-s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
 <span class=hljs-built_in >Ref</span> = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
@@ -1770,7 +1770,15 @@ s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >1</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >1</span>, <span class=hljs-number >0</span> ]
+
+nodeIndex = <span class=hljs-number >2</span>
+s.getPhi()
+[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
+s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
+s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 <span class=hljs-built_in >Ref</span> = ar.indexMatrix() =
 [  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
@@ -1783,7 +1791,7 @@ nodeIndex = <span class=hljs-number >2</span>
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 <span class=hljs-built_in >Ref</span> = ar.indexMatrix() =
@@ -1798,7 +1806,7 @@ nodeIndex = <span class=hljs-number >2</span>
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
 <span class=hljs-built_in >Ref</span> = ar.indexMatrix() =
@@ -1813,6 +1821,37 @@ nodeIndex = <span class=hljs-number >2</span>
 s.getPhi()
 [  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>
    <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>
-  -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> -<span class=hljs-number >9223372036854775808</span> ]
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ]
 s.getFusionOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]
-s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]</code></pre> <p>The value <code>-9223372036854775808</code> is used as a sentinel value indicating that there are no dependencies between separate graph vertices at that level &#40;but there may be within the graph&#41;; the idea is that we&#39;ll solve for values here while determining vectorization and unrolling; the solution must satisfy dependencies within the edge, as well as be linearly independent of the set of solutions of loops exterior to it.</p> <div class=page-foot > <div class="copyright bt b--moon-gray mt4 pt2"> <small class=silver > &copy; Chris Elrod, Yingbo Ma. Last modified: November 14, 2022. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>. </small> </div> </div> </div> </div>
+s.getOffsetOmega() = [ <span class=hljs-number >0</span>, <span class=hljs-number >0</span>, <span class=hljs-number >0</span> ]</code></pre> <p>The value <code>-9223372036854775808</code> is used as a sentinel value indicating that there are no dependencies between separate graph vertices at that level &#40;but there may be within the graph&#41;; the idea is that we&#39;ll solve for values here while determining vectorization and unrolling; the solution must satisfy dependencies within the edge, as well as be linearly independent of the set of solutions of loops exterior to it. We don&#39;t have any examples of that here.</p> <p>A few more notes on interpretation: Each vertex of the graph corresponds to a single store, which is the last memory access listed; all other memory accesses are loads. So, for example, in <code>v_2</code>:</p> <pre><code class="julia hljs">v_2:
+mem =
+  store double %<span class=hljs-number >76</span>, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >70</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >73</span>, !tbaa !<span class=hljs-number >61</span>
+  %<span class=hljs-number >83</span> = load double, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >82</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >91</span>, !tbaa !<span class=hljs-number >61</span>
+  %<span class=hljs-number >87</span> = load double, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >86</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >91</span>, !tbaa !<span class=hljs-number >61</span>
+  store double %<span class=hljs-number >89</span>, double addrspace(<span class=hljs-number >13</span>)* %<span class=hljs-number >82</span>, align <span class=hljs-number >8</span>, !dbg !<span class=hljs-number >97</span>, !tbaa !<span class=hljs-number >61</span>
+inNeighbors = v_0, v_1, v_2,
+outNeighbors = v_1, v_2,</code></pre> <p>This corresponds to <code>store double &#37;89, double addrspace&#40;13&#41;* &#37;82</code>. The other store listed above is actually a reload of that particular store.</p> <p>Additionally, all our analysis of loop bounds and array indexing are built on SCEV &#40;Scalar Evolution&#41;. Things like calculating trip counts, or using <a href="https://llvm.org/doxygen/classllvm_1_1SCEVAddRecExpr.html">AddRecExpr</a> for indexing make it natural to treat all loops as starting at <code>0</code>. Array indexing of course is also naturally treated as pointer-offsets, and thus starts at <code>0</code> as well.</p> <p>For this reason, the Julia loop we showed earlier using 1-based indexing is understood internally as something closer to:</p> <pre><code class="julia hljs"><span class=hljs-string >``</span><span class=hljs-string >`julia-repl
+using OffsetArrays
+function triangular_solve0!(_A,_B,_U)
+    A = OffsetArray(_A, OffsetArrays.Origin(0))
+	B = OffsetArray(_B, OffsetArrays.Origin(0))
+    U = OffsetArray(_U, OffsetArrays.Origin(0))
+    M,N = size(A)
+    @assert M == size(B,1)
+    @assert N == size(B,2)
+    @assert N == LinearAlgebra.checksquare(U)
+    @inbounds for m = 0:M-1
+        for n = 0:N-1
+            A[m,n] = B[m,n]
+        end
+        for n = 0:N-1
+            A[m,n] /= U[n,n]
+            for k = 0:N-1-n
+                A[m,k+n+1] -= A[m,n]*U[n,k+n+1]
+            end
+        end
+    end
+end</span></code></pre> <p>The original loop nest structure is generally represented as being inner&lt;-&gt;outer. This is to ease parsing: we want an affine loop nest, so we start parsing loops from the inner-most loop outward, until we either reach toplevel, or hit something non-affine.</p> <p>The rows of a schedule correspond to the schedules of loops from outer-most to inner-most, however. So, the interpretation of a schedule matrix is as follows:</p> <pre><code class="julia hljs">s.getPhi()
+[  <span class=hljs-number >1</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span>   <span class=hljs-comment ># Outer most loop: k + n</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >0</span>  <span class=hljs-number >1</span>   <span class=hljs-comment ># Middle loop: m</span>
+   <span class=hljs-number >0</span>  <span class=hljs-number >1</span>  <span class=hljs-number >0</span> ] <span class=hljs-comment ># Inner most loop: n</span></code></pre> <p>Note that this recovers our non-zero start, as we recreate a loop induction variable that equals the sum <code>k &#43; n</code> as we originally had. In this case, that is desirable as we can now hoist the loads and stores <code>A&#91;m,k&#43;n&#43;1&#93;</code> out of the inner-most loop. Through unrolling both the <code>k&#43;n</code> and <code>m</code> loop &#40;and vectorizing the <code>m</code> loop&#41;, we can perform register tiling, where we use a large number of vector registers as the accumulators for the inner most loop, updating them on each iteration of the inner loop, maximizing the number of arithmetic operations relative to loads and stores. </p> <div class=page-foot > <div class="copyright bt b--moon-gray mt4 pt2"> <small class=silver > &copy; Chris Elrod, Yingbo Ma. Last modified: November 15, 2022. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>. </small> </div> </div> </div> </div>
