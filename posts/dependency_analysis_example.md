@@ -329,9 +329,8 @@ opt -mcpu=native --disable-output --load-pass-plugin=/home/chriselrod/Documents/
 You'll have to substitute the path to the `libTurboLoop.so` plugin and to the `triangular_solve.ll` as appropriate.
 The output is currently extremely verbose, and it does not yet actually transform the code or perform cost modeling, unrolling, or vectorization analysis.
 But it does perform some dependence analysis; sample output from the above:
-
 ```
-LoopBlock graph:
+LoopBlock graph (#nodes = 3):
 v_0:
 mem =
   %64 = load double, double addrspace(13)* %63, align 8, !dbg !57, !tbaa !61
@@ -345,20 +344,19 @@ mem =
   %75 = load double, double addrspace(13)* %74, align 8, !dbg !68, !tbaa !61
   store double %76, double addrspace(13)* %70, align 8, !dbg !73, !tbaa !61
 inNeighbors = v_0, v_1, v_2,
-outNeighbors = v_1,
+outNeighbors = v_1, v_2,
 
 v_2:
 mem =
-  %71 = load double, double addrspace(13)* %70, align 8, !dbg !68, !tbaa !61
-  %75 = load double, double addrspace(13)* %74, align 8, !dbg !68, !tbaa !61
+  store double %76, double addrspace(13)* %70, align 8, !dbg !73, !tbaa !61
   %83 = load double, double addrspace(13)* %82, align 8, !dbg !91, !tbaa !61
   %87 = load double, double addrspace(13)* %86, align 8, !dbg !91, !tbaa !61
   store double %89, double addrspace(13)* %82, align 8, !dbg !97, !tbaa !61
-inNeighbors = v_0, v_2,
+inNeighbors = v_0, v_1, v_2,
 outNeighbors = v_1, v_2,
 
 
-LoopBlock Edges:
+LoopBlock Edges (#edges = 10):
         Edge = Dependence Poly y -> x:
 v_2 <= -1 + %23
 v_3 <= -1 + %20
@@ -466,7 +464,7 @@ s.getFusionOmega() = [ 0, 0, 0 ]
 s.getOffsetOmega() = [ 1, 0 ]
 
 Schedule Out:
-nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
+nodeIndex = BitSet[1]; ref = ar.indexMatrix() =
 [  1  0
    0  1 ]
 ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
@@ -477,22 +475,7 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
-
-Schedule Out:
-nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
-[  1  0
-   0  1 ]
-ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
-A.numRow() = 2; A.numCol() = 2
-Sizes: [ unknown, %20 ]
-Subscripts: [ i_1 , i_0 ]
-s.getPhi()
-[  1  1  0
-   0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
-s.getFusionOmega() = [ 0, 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
 
         Edge = Dependence Poly y -> x:
 v_2 <= -1 + %23
@@ -601,7 +584,7 @@ s.getFusionOmega() = [ 0, 0, 0 ]
 s.getOffsetOmega() = [ 1, 0 ]
 
 Schedule Out:
-nodeIndex = BitSet[1]; ref = ar.indexMatrix() =
+nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
 [  1  0
    0  1 ]
 ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
@@ -612,7 +595,22 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
+
+Schedule Out:
+nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
+[  1  0
+   0  1 ]
+ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
+A.numRow() = 2; A.numCol() = 2
+Sizes: [ unknown, %20 ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  1  1  0
+   0  0  1
+   0  1  0 ]
+s.getFusionOmega() = [ 0, 0, 0, 0 ]
+s.getOffsetOmega() = [ 0, 0, 0 ]
 
         Edge = Dependence Poly y -> x:
 v_2 <= -1 + %23
@@ -707,33 +705,6 @@ Loop 0 upper bounds:
 i_0 <= -1 + %20
 
 Schedule In:
-nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
-[  1  0
-   0  1 ]
-ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
-A.numRow() = 2; A.numCol() = 2
-Sizes: [ unknown, %20 ]
-Subscripts: [ i_1 , i_0 ]
-s.getPhi()
-[  1  0
-   0  1 ]
-s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]Schedule In:
-nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
-[  1  0
-   0  1 ]
-ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
-A.numRow() = 2; A.numCol() = 2
-Sizes: [ unknown, %20 ]
-Subscripts: [ i_1 , i_0 ]
-s.getPhi()
-[  1  1  0
-   0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
-s.getFusionOmega() = [ 0, 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0, 0 ]
-
-Schedule Out:
 nodeIndex = BitSet[1]; ref = ar.indexMatrix() =
 [  1  0
    0  1 ]
@@ -745,7 +716,36 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
+
+Schedule Out:
+nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
+[  1  0
+   0  1 ]
+ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
+A.numRow() = 2; A.numCol() = 2
+Sizes: [ unknown, %20 ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  1  0
+   0  1 ]
+s.getFusionOmega() = [ 0, 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
+
+Schedule Out:
+nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
+[  1  0
+   0  1 ]
+ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
+A.numRow() = 2; A.numCol() = 2
+Sizes: [ unknown, %20 ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  1  1  0
+   0  0  1
+   0  1  0 ]
+s.getFusionOmega() = [ 0, 0, 0, 0 ]
+s.getOffsetOmega() = [ 0, 0, 0 ]
 
         Edge = Dependence Poly y -> x:
 -v_0 - v_1 + v_3 + v_4 <= 0 + %20
@@ -876,7 +876,7 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
@@ -995,12 +995,12 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
 Schedule Out:
-nodeIndex = BitSet[1]; ref = ar.indexMatrix() =
+nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
 [  1  0
    0  1 ]
 ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
@@ -1011,7 +1011,22 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
+
+Schedule Out:
+nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
+[  1  0
+   0  1 ]
+ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
+A.numRow() = 2; A.numCol() = 2
+Sizes: [ unknown, %20 ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  1  1  0
+   0  0  1
+   0  1  0 ]
+s.getFusionOmega() = [ 0, 0, 0, 0 ]
+s.getOffsetOmega() = [ 0, 0, 0 ]
 
         Edge = Dependence Poly y -> x:
 -v_0 - v_1 + v_3 + v_4 <= 0 + %20
@@ -1142,7 +1157,7 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
@@ -1261,12 +1276,12 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
 Schedule Out:
-nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
+nodeIndex = BitSet[1]; ref = ar.indexMatrix() =
 [  1  0
    0  1 ]
 ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
@@ -1277,22 +1292,7 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
-
-Schedule Out:
-nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
-[  1  0
-   0  1 ]
-ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
-A.numRow() = 2; A.numCol() = 2
-Sizes: [ unknown, %20 ]
-Subscripts: [ i_1 , i_0 ]
-s.getPhi()
-[  1  1  0
-   0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
-s.getFusionOmega() = [ 0, 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
 
         Edge = Dependence Poly x -> y:
 -v_0 - v_1 + v_3 + v_4 <= 0 + %20
@@ -1409,12 +1409,12 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
 Schedule Out:
-nodeIndex = BitSet[1]; ref = ar.indexMatrix() =
+nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
 [  1  0
    0  1 ]
 ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
@@ -1425,7 +1425,22 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
+
+Schedule Out:
+nodeIndex = BitSet[1, 2]; ref = ar.indexMatrix() =
+[  1  0
+   0  1 ]
+ArrayReference %55 (dim = 2, num loops: 2, element size: 8):
+A.numRow() = 2; A.numCol() = 2
+Sizes: [ unknown, %20 ]
+Subscripts: [ i_1 , i_0 ]
+s.getPhi()
+[  1  1  0
+   0  0  1
+   0  1  0 ]
+s.getFusionOmega() = [ 0, 0, 0, 0 ]
+s.getOffsetOmega() = [ 0, 0, 0 ]
 
         Edge = Dependence Poly y -> x:
 v_5 <= -1 + %20
@@ -1557,7 +1572,7 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
@@ -1573,7 +1588,7 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
@@ -1707,7 +1722,7 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
@@ -1723,12 +1738,12 @@ Subscripts: [ i_1  + i_2  + 1, i_0 ]
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 
 
-LoopBlock schedule:
+LoopBlock schedule (#mem accesses = 8):
 
 Ref = ar.indexMatrix() =
 [  1  0
@@ -1768,15 +1783,7 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
-
-nodeIndex = 2
-s.getPhi()
-[  1  1  0
-   0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
-s.getFusionOmega() = [ 0, 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
 Ref = ar.indexMatrix() =
 [  1  1
    0  0 ]
@@ -1789,15 +1796,7 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
-
-nodeIndex = 2
-s.getPhi()
-[  1  1  0
-   0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
-s.getFusionOmega() = [ 0, 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
 Ref = ar.indexMatrix() =
 [  1  0
    0  1 ]
@@ -1810,7 +1809,15 @@ s.getPhi()
 [  1  0
    0  1 ]
 s.getFusionOmega() = [ 0, 0, 0 ]
-s.getOffsetOmega() = [ 0, 0 ]
+s.getOffsetOmega() = [ 1, 0 ]
+
+nodeIndex = 2
+s.getPhi()
+[  1  1  0
+   0  0  1
+   0  1  0 ]
+s.getFusionOmega() = [ 0, 0, 0, 0 ]
+s.getOffsetOmega() = [ 0, 0, 0 ]
 Ref = ar.indexMatrix() =
 [  1  0
    1  0
@@ -1823,7 +1830,7 @@ nodeIndex = 2
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 Ref = ar.indexMatrix() =
@@ -1838,7 +1845,7 @@ nodeIndex = 2
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 Ref = ar.indexMatrix() =
@@ -1853,10 +1860,64 @@ nodeIndex = 2
 s.getPhi()
 [  1  1  0
    0  0  1
-  -9223372036854775808 -9223372036854775808 -9223372036854775808 ]
+   0  1  0 ]
 s.getFusionOmega() = [ 0, 0, 0, 0 ]
 s.getOffsetOmega() = [ 0, 0, 0 ]
 ```
-The value `-9223372036854775808` is used as a sentinel value indicating that there are no dependencies between separate graph vertices at that level (but there may be within the graph); the idea is that we'll solve for values here while determining vectorization and unrolling; the solution must satisfy dependencies within the edge, as well as be linearly independent of the set of solutions of loops exterior to it.
+The value `-9223372036854775808` is used as a sentinel value indicating that there are no dependencies between separate graph vertices at that level (but there may be within the graph); the idea is that we'll solve for values here while determining vectorization and unrolling; the solution must satisfy dependencies within the edge, as well as be linearly independent of the set of solutions of loops exterior to it. We don't have any examples of that here.
 
+A few more notes on interpretation:
+Each vertex of the graph corresponds to a single store, which is the last memory access listed; all other memory accesses are loads. So, for example, in `v_2`:
+```
+v_2:
+mem =
+  store double %76, double addrspace(13)* %70, align 8, !dbg !73, !tbaa !61
+  %83 = load double, double addrspace(13)* %82, align 8, !dbg !91, !tbaa !61
+  %87 = load double, double addrspace(13)* %86, align 8, !dbg !91, !tbaa !61
+  store double %89, double addrspace(13)* %82, align 8, !dbg !97, !tbaa !61
+inNeighbors = v_0, v_1, v_2,
+outNeighbors = v_1, v_2,
+```
+This corresponds to `store double %89, double addrspace(13)* %82`.
+The other store listed above is actually a reload of that particular store.
+
+Additionally, all our analysis of loop bounds and array indexing are built on SCEV (Scalar Evolution). Things like calculating trip counts, or using [AddRecExpr](https://llvm.org/doxygen/classllvm_1_1SCEVAddRecExpr.html) for indexing make it natural to treat all loops as starting at `0`.
+Array indexing of course is also naturally treated as pointer-offsets, and thus starts at `0` as well.
+
+For this reason, the Julia loop we showed earlier using 1-based indexing is understood internally as something closer to:
+```julia
+```julia-repl
+using OffsetArrays
+function triangular_solve0!(_A,_B,_U)
+    A = OffsetArray(_A, OffsetArrays.Origin(0))
+	B = OffsetArray(_B, OffsetArrays.Origin(0))
+    U = OffsetArray(_U, OffsetArrays.Origin(0))
+    M,N = size(A)
+    @assert M == size(B,1)
+    @assert N == size(B,2)
+    @assert N == LinearAlgebra.checksquare(U)
+    @inbounds for m = 0:M-1
+        for n = 0:N-1
+            A[m,n] = B[m,n]
+        end
+        for n = 0:N-1
+            A[m,n] /= U[n,n]
+            for k = 0:N-1-n
+                A[m,k+n+1] -= A[m,n]*U[n,k+n+1]
+            end
+        end
+    end
+end
+```
+The original loop nest structure is generally represented as being inner<->outer.
+This is to ease parsing: we want an affine loop nest, so we start parsing loops from the inner-most loop outward, until we either reach toplevel, or hit something non-affine.
+
+The rows of a schedule correspond to the schedules of loops from outer-most to inner-most, however. So, the interpretation of a schedule matrix is as follows:
+```
+s.getPhi()
+[  1  1  0   # Outer most loop: k + n
+   0  0  1   # Middle loop: m
+   0  1  0 ] # Inner most loop: n
+```
+Note that this recovers our non-zero start, as we recreate a loop induction variable that equals the sum `k + n` as we originally had. In this case, that is desirable as we can now hoist the loads and stores `A[m,k+n+1]` out of the inner-most loop. Through unrolling both the `k+n` and `m` loop (and vectorizing the `m` loop), we can perform register tiling, where we use a large number of vector registers as the accumulators for the inner most loop, updating them on each iteration of the inner loop, maximizing the number of arithmetic operations relative to loads and stores. 
 
