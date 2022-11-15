@@ -1886,7 +1886,6 @@ Array indexing of course is also naturally treated as pointer-offsets, and thus 
 
 For this reason, the Julia loop we showed earlier using 1-based indexing is understood internally as something closer to:
 ```julia
-```julia-repl
 using OffsetArrays
 function triangular_solve0!(_A,_B,_U)
     A = OffsetArray(_A, OffsetArrays.Origin(0))
