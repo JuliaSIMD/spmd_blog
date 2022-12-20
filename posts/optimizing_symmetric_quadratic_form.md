@@ -2,7 +2,7 @@
 title = "Optimizing Symmetric Quadratic Form"
 hascode = true
 date = Date(2022, 12, 19)
-rss = ""
+rss = "Semi-manual optimization of a symmetric quadratic form."
 +++
 
 @def tags = ["julia", "optimization", "quadratic-form", "loop-transformation", "linear-algebra"]
