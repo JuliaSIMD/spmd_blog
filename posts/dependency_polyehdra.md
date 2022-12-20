@@ -161,7 +161,7 @@ julia> using ModelingToolkit
 
 julia> A = [1  1  0
             0  1  1
-			1  0 -1];
+            1  0 -1];
 
 julia> ModelingToolkit.nullspace(A)
 3×1 Matrix{Int64}:

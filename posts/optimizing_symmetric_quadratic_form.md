@@ -14,8 +14,8 @@ using LinearAlgebra, MKL, BenchmarkTools, LoopVectorization
 product_1(x, M) = dot(x, M, x)
 
 function product_2(x, M) 
-	Mx = M * x
-	return dot(x, Mx)
+    Mx = M * x
+    return dot(x, Mx)
 end
 function product_3(x, M)
     n = length(x)
@@ -152,12 +152,12 @@ function product_4(x, _M)
     n = length(x)
     result_diag = zero(eltype(x))
     result_supd = zero(eltype(x))
-	M = _M isa Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
+    M = _M isa Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
     @inbounds for i = 1:n
         result_diag += x[i]^2 * M[i, i]
-	    result_innr = zero(eltype(x))
+        result_innr = zero(eltype(x))
         @simd for j = 1 : i - 1
             result_innr += x[j] * M[j, i]
         end
@@ -179,12 +179,12 @@ If our math is slow, maybe we just need to ask the compiler to make it fast?
     n = length(x)
     result_diag = zero(eltype(x))
     result_supd = zero(eltype(x))
-	M = _M isa Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
+    M = _M isa Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
     @inbounds for i = 1:n
         result_diag += x[i]^2 * M[i, i]
-	    result_innr = zero(eltype(x))
+        result_innr = zero(eltype(x))
         @simd for j = 1 : i - 1
             result_innr += x[j] * M[j, i]
         end
@@ -203,17 +203,17 @@ But we're still a far cry from `@turbo`. Unfortunately, because `LoopVectorizati
 ```julia
 @fastmath function product_6(x, _M) # only change is `@fastmath`
     n = length(x)
-	n == 0 && return zero(eltype(x))
-	M = _M isa Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
+    n == 0 && return zero(eltype(x))
+    M = _M isa Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
     result_diag = x[1]^2 * M[1, 1]
     result_supd = zero(eltype(x))
-	# `@turbo` doesn't support length-0 iteration
-	# so we need to make sure length(1:i-1) > 0
+    # `@turbo` doesn't support length-0 iteration
+    # so we need to make sure length(1:i-1) > 0
     @inbounds for i = 2:n 
         result_diag += x[i]^2 * M[i, i]
-	    result_innr = zero(eltype(x))
+        result_innr = zero(eltype(x))
         @turbo for j = 1 : i - 1
             result_innr += x[j] * M[j, i]
         end
@@ -276,20 +276,20 @@ Then, we just have to accumulate the vector into a scalar ourselves before retur
 using VectorizationBase
 @fastmath function product_7(x, _M) # only change is `@fastmath`
     n = length(x)
-	T = eltype(x)
-	n == 0 && return zero(T)
-	M = _M isa Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
+    T = eltype(x)
+    n == 0 && return zero(T)
+    M = _M isa Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
     result_diag = Vec(zero(T))
-	@turbo for i = 1:n
-		result_diag += x[i]^2 * M[i, i]
-	end
+    @turbo for i = 1:n
+        result_diag += x[i]^2 * M[i, i]
+    end
     result_supd = Vec(zero(T))
-	# `@turbo` doesn't support length-0 iteration
-	# so we need to make sure length(1:i-1) > 0
+    # `@turbo` doesn't support length-0 iteration
+    # so we need to make sure length(1:i-1) > 0
     @inbounds for i = 2:n 
-	    result_innr = Vec(zero(T))
+        result_innr = Vec(zero(T))
         @turbo for j = 1 : i - 1
             result_innr += x[j] * M[j, i]
         end
@@ -311,52 +311,52 @@ The other major optimization `@turbo` does when applied to the outer loop is to 
 ```julia
 function product_8(x, _M)
     N = length(x)
-	T = eltype(x)
-	N == 0 && return zero(T)
-	M = _M isa Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
-	# we unroll the outer loop by 8
-	remainder = N & 7
-	n = remainder
-	if n != N # guard
-	    # 8 accumulators (for the outer loop)
-		Base.Cartesian.@nexprs 4 i -> acc_i = Vec(zero(T))
-		while true
-			Base.Cartesian.@nexprs 8 i -> a_i = Vec(zero(T))
-			# iterations i = n+1:n+8
-			if n != 0
-			    # we'll loop normally up through n
-			    @turbo for j = 1:n
-				    Base.Cartesian.@nexprs 8 i -> begin
-						a_i += x[j] * M[j,i+n]
-					end
-				end
-			end
-			# 8x8 diagonal block
-			@turbo for j = 1:8
-			    Base.Cartesian.@nexprs 8 i -> begin
-			        mask_i = (j<i) + 0.5*(j==i)
-			        a_i += x[j+n] * (M[j+n,i+n] * mask_i)
-				end
-			end
-			Base.Cartesian.@nexprs 4 i -> acc_i += x[i+n]*a_i
-			Base.Cartesian.@nexprs 4 i -> acc_i += x[4+i+n]*a_{4+i}
-			n += 8
-			n == N && break
-		end # while true
-		acc_1 += acc_3
-		acc_2 += acc_4
-		acc_1 += acc_2
-		ret = 2*VectorizationBase.vsum(acc_1)
-	    remainder == 0 && return ret
-	else
-	    ret = zero(T)
-	end
-	# we know remainder != 0, because N == 0 returned early
-	r = Base.oneto(remainder)
+    T = eltype(x)
+    N == 0 && return zero(T)
+    M = _M isa Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
+    # we unroll the outer loop by 8
+    remainder = N & 7
+    n = remainder
+    if n != N # guard
+        # 8 accumulators (for the outer loop)
+        Base.Cartesian.@nexprs 4 i -> acc_i = Vec(zero(T))
+        while true
+            Base.Cartesian.@nexprs 8 i -> a_i = Vec(zero(T))
+            # iterations i = n+1:n+8
+            if n != 0
+                # we'll loop normally up through n
+                @turbo for j = 1:n
+                    Base.Cartesian.@nexprs 8 i -> begin
+                        a_i += x[j] * M[j,i+n]
+                    end
+                end
+            end
+            # 8x8 diagonal block
+            @turbo for j = 1:8
+                Base.Cartesian.@nexprs 8 i -> begin
+                    mask_i = (j<i) + 0.5*(j==i)
+                    a_i += x[j+n] * (M[j+n,i+n] * mask_i)
+                end
+            end
+            Base.Cartesian.@nexprs 4 i -> acc_i += x[i+n]*a_i
+            Base.Cartesian.@nexprs 4 i -> acc_i += x[4+i+n]*a_{4+i}
+            n += 8
+            n == N && break
+        end # while true
+        acc_1 += acc_3
+        acc_2 += acc_4
+        acc_1 += acc_2
+        ret = 2*VectorizationBase.vsum(acc_1)
+        remainder == 0 && return ret
+    else
+        ret = zero(T)
+    end
+    # we know remainder != 0, because N == 0 returned early
+    r = Base.oneto(remainder)
     # product_5 seemed fast for small inputs
-	return ret + @views product_5(x[r], M[r,r])
+    return ret + @views product_5(x[r], M[r,r])
 end
 ```
 Now performance is starting to look pretty good:
