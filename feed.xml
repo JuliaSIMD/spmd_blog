@@ -23,6 +23,25 @@
 
 <item>
   <title>
+    <![CDATA[  Optimizing Symmetric Quadratic Form  ]]>
+  </title>
+  <link> https://spmd.org/posts/optimizing_symmetric_quadratic_form/index.html </link>
+  <guid> https://spmd.org/posts/optimizing_symmetric_quadratic_form/index.html </guid>
+  <description>
+    <![CDATA[  Semi-manual optimization of a symmetric quadratic form.  ]]>
+  </description>  
+    
+  <pubDate>Mon, 19 Dec 2022 00:00:00 +0000</pubDate>  
+  
+  
+  <atom:author>
+    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
+  </atom:author>
+        
+</item>
+
+<item>
+  <title>
     <![CDATA[  Dependency Analysis of Julia Loops Example  ]]>
   </title>
   <link> https://spmd.org/posts/dependency_analysis_example/index.html </link>
