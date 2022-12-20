@@ -397,3 +397,16 @@ That is, loading from $A$ becomes $\frac{15}{8}$ times more expensive. We have a
 If we try to address this by pealing loop iterations at the start of each column to align the loads from $A$, this causes one of two complications. Either
 1. We can no longer unroll the outer loop, increasing the cost of reloading $x$ in the inner loop from $\frac{N^2}{64}$ to $\frac{N^2}{8}$, an increase in cost of $\frac{16N^2}{128} - \frac{2N^2}{128} = \frac{14}{128}$, meaning this is potentially a smaller increase in cost than what the unrolled `product_8` suffers.
 2. Still unroll, and use shuffle/permute instructions to try and line up the loads of `x` correctly with the loads from `A` that may now all be offset to align them. This approach would require generating different specializations for the different offset patterns, where you'd have fixed shuffle sequences in each one. As we're dominated by loads, the shuffles may be "free"/able to execute concurrently, making this likely the fastest, but most complicated, approach. This is especially the case for Zen4, which has fairly fast shuffles but slow loads, or for consumer AVX512 Intel CPUs, which can use port 5 for shuffle instructions but not for floating point arithmetic, again making shuffles more or less "free" to execute concurrently with loads and floating point.
+
+P.S. A goal of `LoopModels` will be that `@turbo` will generate code as fast or faster than the above for code as simple as
+```julia
+@turbo function dotturbo(x, A)
+    s = zero(Base.promote_eltype(x, A))
+    @assert eachindex(x) == axes(A,1) == axes(A,2)
+    for i = eachindex(x), j = eachindex(x)
+        s += x[i] * A[i,j] * x[j]
+    end
+    s
+end
+```
+when `A isa Symmetric`, and again of course doing the right thing when `A isa Adjoint`, or simple `A isa Matrix`. Our code should express our intent, simple and generic. The compiler should find out how to do the right thing for the types.
