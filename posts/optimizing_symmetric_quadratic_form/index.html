@@ -2,8 +2,8 @@
 product_1(x, M) = dot(x, M, x)
 
 <span class=hljs-keyword >function</span> product_2(x, M) 
-	Mx = M * x
-	<span class=hljs-keyword >return</span> dot(x, Mx)
+    Mx = M * x
+    <span class=hljs-keyword >return</span> dot(x, Mx)
 <span class=hljs-keyword >end</span>
 <span class=hljs-keyword >function</span> product_3(x, M)
     n = length(x)
@@ -98,12 +98,12 @@ BenchmarkTools.Trial: <span class=hljs-number >10000</span> samples with <span c
     n = length(x)
     result_diag = zero(eltype(x))
     result_supd = zero(eltype(x))
-	M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
+    M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
     <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> i = <span class=hljs-number >1</span>:n
         result_diag += x[i]^<span class=hljs-number >2</span> * M[i, i]
-	    result_innr = zero(eltype(x))
+        result_innr = zero(eltype(x))
         <span class=hljs-meta >@simd</span> <span class=hljs-keyword >for</span> j = <span class=hljs-number >1</span> : i - <span class=hljs-number >1</span>
             result_innr += x[j] * M[j, i]
         <span class=hljs-keyword >end</span>
@@ -116,12 +116,12 @@ BenchmarkTools.Trial: <span class=hljs-number >10000</span> samples with <span c
     n = length(x)
     result_diag = zero(eltype(x))
     result_supd = zero(eltype(x))
-	M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
+    M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
     <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> i = <span class=hljs-number >1</span>:n
         result_diag += x[i]^<span class=hljs-number >2</span> * M[i, i]
-	    result_innr = zero(eltype(x))
+        result_innr = zero(eltype(x))
         <span class=hljs-meta >@simd</span> <span class=hljs-keyword >for</span> j = <span class=hljs-number >1</span> : i - <span class=hljs-number >1</span>
             result_innr += x[j] * M[j, i]
         <span class=hljs-keyword >end</span>
@@ -132,17 +132,17 @@ BenchmarkTools.Trial: <span class=hljs-number >10000</span> samples with <span c
   <span class=hljs-number >3.503</span> μs (<span class=hljs-number >0</span> allocations: <span class=hljs-number >0</span> bytes)
 <span class=hljs-number >508214.49429146934</span></code></pre> <p>But we&#39;re still a far cry from <code>@turbo</code>. Unfortunately, because <code>LoopVectorization.jl</code> only supports rectangular loops, we&#39;re limited to applying it to the inner-most loop, hamstringing it:</p> <pre><code class="julia hljs"><span class=hljs-meta >@fastmath</span> <span class=hljs-keyword >function</span> product_6(x, _M) <span class=hljs-comment ># only change is `@fastmath`</span>
     n = length(x)
-	n == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> zero(eltype(x))
-	M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
+    n == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> zero(eltype(x))
+    M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
     result_diag = x[<span class=hljs-number >1</span>]^<span class=hljs-number >2</span> * M[<span class=hljs-number >1</span>, <span class=hljs-number >1</span>]
     result_supd = zero(eltype(x))
-	<span class=hljs-comment ># `@turbo` doesn&#x27;t support length-0 iteration</span>
-	<span class=hljs-comment ># so we need to make sure length(1:i-1) &gt; 0</span>
+    <span class=hljs-comment ># `@turbo` doesn&#x27;t support length-0 iteration</span>
+    <span class=hljs-comment ># so we need to make sure length(1:i-1) &gt; 0</span>
     <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> i = <span class=hljs-number >2</span>:n 
         result_diag += x[i]^<span class=hljs-number >2</span> * M[i, i]
-	    result_innr = zero(eltype(x))
+        result_innr = zero(eltype(x))
         <span class=hljs-meta >@turbo</span> <span class=hljs-keyword >for</span> j = <span class=hljs-number >1</span> : i - <span class=hljs-number >1</span>
             result_innr += x[j] * M[j, i]
         <span class=hljs-keyword >end</span>
@@ -178,20 +178,20 @@ julia&gt; <span class=hljs-meta >@btime</span> product_6($x, $B)
 <span class=hljs-number >580770.6876433745</span></code></pre> <p>so the performance advantage decreases as the vector width decreases. This is mostly because LLVM doesn&#39;t handle remainders efficiently. The larger the vectors, the larger the remainders on average, the worse LLVM&#39;s performance.</p> <p>So, what&#39;s left, what&#39;s missing? What would <code>@turbo</code> on an outerloop do differently? For one thing, reducing vectors to scalars is expensive, so <code>@turbo</code> will only do so once at the end, while our code is doing so on every iteration of the outer loop. How can we avoid doing so?</p> <p>We can tell <code>@turbo</code> we want to accumulate into a SIMD vector instead of a scalar by defining our accumulator to be a <code>VectorizationBase.Vec</code> instead of a scalar. Then, we just have to accumulate the vector into a scalar ourselves before returning the value:</p> <pre><code class="julia hljs"><span class=hljs-keyword >using</span> VectorizationBase
 <span class=hljs-meta >@fastmath</span> <span class=hljs-keyword >function</span> product_7(x, _M) <span class=hljs-comment ># only change is `@fastmath`</span>
     n = length(x)
-	T = eltype(x)
-	n == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> zero(T)
-	M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
+    T = eltype(x)
+    n == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> zero(T)
+    M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
     result_diag = Vec(zero(T))
-	<span class=hljs-meta >@turbo</span> <span class=hljs-keyword >for</span> i = <span class=hljs-number >1</span>:n
-		result_diag += x[i]^<span class=hljs-number >2</span> * M[i, i]
-	<span class=hljs-keyword >end</span>
+    <span class=hljs-meta >@turbo</span> <span class=hljs-keyword >for</span> i = <span class=hljs-number >1</span>:n
+        result_diag += x[i]^<span class=hljs-number >2</span> * M[i, i]
+    <span class=hljs-keyword >end</span>
     result_supd = Vec(zero(T))
-	<span class=hljs-comment ># `@turbo` doesn&#x27;t support length-0 iteration</span>
-	<span class=hljs-comment ># so we need to make sure length(1:i-1) &gt; 0</span>
+    <span class=hljs-comment ># `@turbo` doesn&#x27;t support length-0 iteration</span>
+    <span class=hljs-comment ># so we need to make sure length(1:i-1) &gt; 0</span>
     <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> i = <span class=hljs-number >2</span>:n 
-	    result_innr = Vec(zero(T))
+        result_innr = Vec(zero(T))
         <span class=hljs-meta >@turbo</span> <span class=hljs-keyword >for</span> j = <span class=hljs-number >1</span> : i - <span class=hljs-number >1</span>
             result_innr += x[j] * M[j, i]
         <span class=hljs-keyword >end</span>
@@ -202,52 +202,52 @@ julia&gt; <span class=hljs-meta >@btime</span> product_6($x, $B)
   <span class=hljs-number >1.354</span> μs (<span class=hljs-number >0</span> allocations: <span class=hljs-number >0</span> bytes)
 <span class=hljs-number >508214.4942914695</span></code></pre> <p>Well ahead of any other implementation.</p> <p>The other major optimization <code>@turbo</code> does when applied to the outer loop is to cut down on the <code>x&#91;j&#93;</code> reloads in the inner <code>j</code> loop by unrolling the outer <code>i</code> loop. That is, if we unroll <code>M&#91;j,i&#93;</code> by 8, we can reuse an <code>x&#91;j&#93;</code> load 8 times before discarding it and moving on to the next inner loop iteration. In this way, we need <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mn>1</mn><mn>8</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{1}{8}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:1.190108em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.845108em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span> as many loads from <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.43056em;vertical-align:0em;"></span><span class="mord mathnormal">x</span></span></span></span> in the inner loop.</p> <pre><code class="julia hljs"><span class=hljs-keyword >function</span> product_8(x, _M)
     N = length(x)
-	T = eltype(x)
-	N == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> zero(T)
-	M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
-	Base.require_one_based_indexing(x)
-	Base.require_one_based_indexing(M)
-	<span class=hljs-comment ># we unroll the outer loop by 8</span>
-	remainder = N &amp; <span class=hljs-number >7</span>
-	n = remainder
-	<span class=hljs-keyword >if</span> n != N <span class=hljs-comment ># guard</span>
-	    <span class=hljs-comment ># 8 accumulators (for the outer loop)</span>
-		Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >4</span> i -&gt; acc_i = Vec(zero(T))
-		<span class=hljs-keyword >while</span> <span class=hljs-literal >true</span>
-			Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >8</span> i -&gt; a_i = Vec(zero(T))
-			<span class=hljs-comment ># iterations i = n+1:n+8</span>
-			<span class=hljs-keyword >if</span> n != <span class=hljs-number >0</span>
-			    <span class=hljs-comment ># we&#x27;ll loop normally up through n</span>
-			    <span class=hljs-meta >@turbo</span> <span class=hljs-keyword >for</span> j = <span class=hljs-number >1</span>:n
-				    Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >8</span> i -&gt; <span class=hljs-keyword >begin</span>
-						a_i += x[j] * M[j,i+n]
-					<span class=hljs-keyword >end</span>
-				<span class=hljs-keyword >end</span>
-			<span class=hljs-keyword >end</span>
-			<span class=hljs-comment ># 8x8 diagonal block</span>
-			<span class=hljs-meta >@turbo</span> <span class=hljs-keyword >for</span> j = <span class=hljs-number >1</span>:<span class=hljs-number >8</span>
-			    Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >8</span> i -&gt; <span class=hljs-keyword >begin</span>
-			        mask_i = (j&lt;i) + <span class=hljs-number >0.5</span>*(j==i)
-			        a_i += x[j+n] * (M[j+n,i+n] * mask_i)
-				<span class=hljs-keyword >end</span>
-			<span class=hljs-keyword >end</span>
-			Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >4</span> i -&gt; acc_i += x[i+n]*a_i
-			Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >4</span> i -&gt; acc_i += x[<span class=hljs-number >4</span>+i+n]*a_{<span class=hljs-number >4</span>+i}
-			n += <span class=hljs-number >8</span>
-			n == N &amp;&amp; <span class=hljs-keyword >break</span>
-		<span class=hljs-keyword >end</span> <span class=hljs-comment ># while true</span>
-		acc_1 += acc_3
-		acc_2 += acc_4
-		acc_1 += acc_2
-		ret = <span class=hljs-number >2</span>*VectorizationBase.vsum(acc_1)
-	    remainder == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> ret
-	<span class=hljs-keyword >else</span>
-	    ret = zero(T)
-	<span class=hljs-keyword >end</span>
-	<span class=hljs-comment ># we know remainder != 0, because N == 0 returned early</span>
-	r = Base.oneto(remainder)
+    T = eltype(x)
+    N == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> zero(T)
+    M = _M <span class=hljs-keyword >isa</span> Symmetric ? parent(_M) : _M
+    Base.require_one_based_indexing(x)
+    Base.require_one_based_indexing(M)
+    <span class=hljs-comment ># we unroll the outer loop by 8</span>
+    remainder = N &amp; <span class=hljs-number >7</span>
+    n = remainder
+    <span class=hljs-keyword >if</span> n != N <span class=hljs-comment ># guard</span>
+        <span class=hljs-comment ># 8 accumulators (for the outer loop)</span>
+        Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >4</span> i -&gt; acc_i = Vec(zero(T))
+        <span class=hljs-keyword >while</span> <span class=hljs-literal >true</span>
+            Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >8</span> i -&gt; a_i = Vec(zero(T))
+            <span class=hljs-comment ># iterations i = n+1:n+8</span>
+            <span class=hljs-keyword >if</span> n != <span class=hljs-number >0</span>
+                <span class=hljs-comment ># we&#x27;ll loop normally up through n</span>
+                <span class=hljs-meta >@turbo</span> <span class=hljs-keyword >for</span> j = <span class=hljs-number >1</span>:n
+                    Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >8</span> i -&gt; <span class=hljs-keyword >begin</span>
+                        a_i += x[j] * M[j,i+n]
+                    <span class=hljs-keyword >end</span>
+                <span class=hljs-keyword >end</span>
+            <span class=hljs-keyword >end</span>
+            <span class=hljs-comment ># 8x8 diagonal block</span>
+            <span class=hljs-meta >@turbo</span> <span class=hljs-keyword >for</span> j = <span class=hljs-number >1</span>:<span class=hljs-number >8</span>
+                Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >8</span> i -&gt; <span class=hljs-keyword >begin</span>
+                    mask_i = (j&lt;i) + <span class=hljs-number >0.5</span>*(j==i)
+                    a_i += x[j+n] * (M[j+n,i+n] * mask_i)
+                <span class=hljs-keyword >end</span>
+            <span class=hljs-keyword >end</span>
+            Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >4</span> i -&gt; acc_i += x[i+n]*a_i
+            Base.Cartesian.<span class=hljs-meta >@nexprs</span> <span class=hljs-number >4</span> i -&gt; acc_i += x[<span class=hljs-number >4</span>+i+n]*a_{<span class=hljs-number >4</span>+i}
+            n += <span class=hljs-number >8</span>
+            n == N &amp;&amp; <span class=hljs-keyword >break</span>
+        <span class=hljs-keyword >end</span> <span class=hljs-comment ># while true</span>
+        acc_1 += acc_3
+        acc_2 += acc_4
+        acc_1 += acc_2
+        ret = <span class=hljs-number >2</span>*VectorizationBase.vsum(acc_1)
+        remainder == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> ret
+    <span class=hljs-keyword >else</span>
+        ret = zero(T)
+    <span class=hljs-keyword >end</span>
+    <span class=hljs-comment ># we know remainder != 0, because N == 0 returned early</span>
+    r = Base.oneto(remainder)
     <span class=hljs-comment ># product_5 seemed fast for small inputs</span>
-	<span class=hljs-keyword >return</span> ret + <span class=hljs-meta >@views</span> product_5(x[r], M[r,r])
+    <span class=hljs-keyword >return</span> ret + <span class=hljs-meta >@views</span> product_5(x[r], M[r,r])
 <span class=hljs-keyword >end</span></code></pre> <p>Now performance is starting to look pretty good:</p> <pre><code class="julia hljs">julia&gt; <span class=hljs-meta >@btime</span> product_8($x, $B)
   <span class=hljs-number >987.308</span> ns (<span class=hljs-number >0</span> allocations: <span class=hljs-number >0</span> bytes)
 <span class=hljs-number >508214.49429146945</span></code></pre> <p>We&#39;re now under 1 microsecond, leaving all the competition well behind, so I think I&#39;ll call it quits for today.</p> <p>Note however that this implementation optimistically assumes that <code>stride&#40;A,2&#41;&#37;8&#61;&#61;0</code>.</p> <p>If we want to try and address alignment, we could consider taking <code>product_7</code>, and then initially pealing off enough initial iterations of the inner loop to align it. Not crossing 64 byte boundaries with loads from <code>A</code> will make them cheaper, but at the cost of reloading <code>x</code> more often. Given aligned loads and a vector width of <code>8</code>, we could estimate the cost of this as roughly <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo fence=true >(</mo><mfrac><mi>N</mi><mn>8</mn></mfrac><mo fence=true >)</mo></mrow><mrow><mo fence=true >(</mo><mfrac><mi>N</mi><mn>8</mn></mfrac><mo fence=true >)</mo></mrow><mo>+</mo><mfrac><mrow><mi>N</mi><mo stretchy=false >(</mo><mi>N</mi><mo>+</mo><mn>1</mn><mo stretchy=false >)</mo></mrow><mrow><mn>2</mn><mo>⋅</mo><mn>8</mn></mrow></mfrac><mo>+</mo><mi>N</mi><mo>=</mo><mfrac><msup><mi>N</mi><mn>2</mn></msup><mn>64</mn></mfrac><mo>+</mo><mfrac><mrow><mo stretchy=false >(</mo><mi>N</mi><mo stretchy=false >(</mo><mi>N</mi><mo>+</mo><mn>1</mn><mo stretchy=false >)</mo><mo stretchy=false >)</mo></mrow><mn>16</mn></mfrac><mo>+</mo><mi>N</mi></mrow><annotation encoding="application/x-tex">\left(\frac{N}{8}\right)\left(\frac{N}{8}\right) + \frac{N(N+1)}{2\cdot 8} + N = \frac{N^2}{64} + \frac{(N(N+1))}{16} + N</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:1.222341em;vertical-align:-0.35001em;"></span><span class=minner ><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.872331em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span><span class=mspace  style="margin-right:0.16666666666666666em;"></span><span class=minner ><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.872331em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span><span class=mspace  style="margin-right:0.2222222222222222em;"></span><span class=mbin >+</span><span class=mspace  style="margin-right:0.2222222222222222em;"></span></span><span class=base ><span class=strut  style="height:1.355em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:1.01em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span><span class="mbin mtight">⋅</span><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.485em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span><span class="mopen mtight">(</span><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span><span class="mbin mtight">+</span><span class="mord mtight">1</span><span class="mclose mtight">)</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class=mspace  style="margin-right:0.2222222222222222em;"></span><span class=mbin >+</span><span class=mspace  style="margin-right:0.2222222222222222em;"></span></span><span class=base ><span class=strut  style="height:0.68333em;vertical-align:0em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span><span class=mspace  style="margin-right:0.2777777777777778em;"></span><span class=mrel >=</span><span class=mspace  style="margin-right:0.2777777777777778em;"></span></span><span class=base ><span class=strut  style="height:1.36292em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:1.01792em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">6</span><span class="mord mtight">4</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span><span class=msupsub ><span class=vlist-t ><span class=vlist-r ><span class=vlist  style="height:0.8913142857142857em;"><span style="top:-2.931em;margin-right:0.07142857142857144em;"><span class=pstrut  style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class=mspace  style="margin-right:0.2222222222222222em;"></span><span class=mbin >+</span><span class=mspace  style="margin-right:0.2222222222222222em;"></span></span><span class=base ><span class=strut  style="height:1.355em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:1.01em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span><span class="mord mtight">6</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.485em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mopen mtight">(</span><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span><span class="mopen mtight">(</span><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span><span class="mbin mtight">+</span><span class="mord mtight">1</span><span class="mclose mtight">)</span><span class="mclose mtight">)</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class=mspace  style="margin-right:0.2222222222222222em;"></span><span class=mbin >+</span><span class=mspace  style="margin-right:0.2222222222222222em;"></span></span><span class=base ><span class=strut  style="height:0.68333em;vertical-align:0em;"></span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span></span></span></span>. The <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo fence=true >(</mo><mfrac><mi>N</mi><mn>8</mn></mfrac><mo fence=true >)</mo></mrow><mrow><mo fence=true >(</mo><mfrac><mi>N</mi><mn>8</mn></mfrac><mo fence=true >)</mo></mrow></mrow><annotation encoding="application/x-tex">\left(\frac{N}{8}\right)\left(\frac{N}{8}\right)</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:1.222341em;vertical-align:-0.35001em;"></span><span class=minner ><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.872331em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span><span class=mspace  style="margin-right:0.16666666666666666em;"></span><span class=minner ><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size1">(</span></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.872331em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size1">)</span></span></span></span></span></span> reflects the <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mi>N</mi><mn>8</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{N}{8}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:1.217331em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.872331em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span> outer loop iterations times the <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mi>N</mi><mi>W</mi></mfrac><mo>=</mo><mfrac><mi>N</mi><mn>8</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{N}{W}=\frac{N}{8}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:1.217331em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.872331em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.13889em;">W</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class=mspace  style="margin-right:0.2777777777777778em;"></span><span class=mrel >=</span><span class=mspace  style="margin-right:0.2777777777777778em;"></span></span><span class=base ><span class=strut  style="height:1.217331em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.872331em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span> loads per inner loop iteration. The <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mrow><mi>N</mi><mo stretchy=false >(</mo><mi>N</mi><mo>+</mo><mn>1</mn><mo stretchy=false >)</mo></mrow><mn>2</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{N(N+1)}{2}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:1.355em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:1.01em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">2</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.485em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span><span class="mopen mtight">(</span><span class="mord mathnormal mtight" style="margin-right:0.10903em;">N</span><span class="mbin mtight">+</span><span class="mord mtight">1</span><span class="mclose mtight">)</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span> are the number of elements we&#39;re loading from <code>A</code>, then the <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mn>1</mn><mn>8</mn></mfrac></mrow><annotation encoding="application/x-tex">\frac{1}{8}</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:1.190108em;vertical-align:-0.345em;"></span><span class=mord ><span class="mopen nulldelimiter"></span><span class=mfrac ><span class="vlist-t vlist-t2"><span class=vlist-r ><span class=vlist  style="height:0.845108em;"><span style="top:-2.6550000000000002em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">8</span></span></span></span><span style="top:-3.23em;"><span class=pstrut  style="height:3em;"></span><span class=frac-line  style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class=pstrut  style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span></span></span></span></span><span class=vlist-s >​</span></span><span class=vlist-r ><span class=vlist  style="height:0.345em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span> is again dividing by <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi></mrow><annotation encoding="application/x-tex">W</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.68333em;vertical-align:0em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">W</span></span></span></span>. The final <span class=katex ><span class=katex-mathml ><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>+</mo><mi>N</mi></mrow><annotation encoding="application/x-tex">+ N</annotation></semantics></math></span><span class=katex-html  aria-hidden=true ><span class=base ><span class=strut  style="height:0.76666em;vertical-align:-0.08333em;"></span><span class=mord >+</span><span class="mord mathnormal" style="margin-right:0.10903em;">N</span></span></span></span> are the loads <code>x&#91;i&#93;</code>, insignificant thanks to the smaller exponent.</p> <p>The base pointer of a large array, e.g. <code>A</code>, will normally be 64 byte aligned.</p> <pre><code class="julia hljs">julia&gt; <span class=hljs-built_in >Int</span>(pointer(A))%<span class=hljs-number >64</span>

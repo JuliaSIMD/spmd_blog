@@ -1833,7 +1833,7 @@ inNeighbors = v_0, v_1, v_2,
 outNeighbors = v_1, v_2,</code></pre> <p>This corresponds to <code>store double &#37;89, double addrspace&#40;13&#41;* &#37;82</code>. The other store listed above is actually a reload of that particular store.</p> <p>Additionally, all our analysis of loop bounds and array indexing are built on SCEV &#40;Scalar Evolution&#41;. Things like calculating trip counts, or using <a href="https://llvm.org/doxygen/classllvm_1_1SCEVAddRecExpr.html">AddRecExpr</a> for indexing make it natural to treat all loops as starting at <code>0</code>. Array indexing of course is also naturally treated as pointer-offsets, and thus starts at <code>0</code> as well.</p> <p>For this reason, the Julia loop we showed earlier using 1-based indexing is understood internally as something closer to:</p> <pre><code class="julia hljs"><span class=hljs-keyword >using</span> OffsetArrays
 <span class=hljs-keyword >function</span> triangular_solve0!(_A,_B,_U)
     A = OffsetArray(_A, OffsetArrays.Origin(<span class=hljs-number >0</span>))
-	B = OffsetArray(_B, OffsetArrays.Origin(<span class=hljs-number >0</span>))
+    B = OffsetArray(_B, OffsetArrays.Origin(<span class=hljs-number >0</span>))
     U = OffsetArray(_U, OffsetArrays.Origin(<span class=hljs-number >0</span>))
     M,N = size(A)
     <span class=hljs-meta >@assert</span> M == size(B,<span class=hljs-number >1</span>)
