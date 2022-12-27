@@ -34,3 +34,9 @@ For instance:
 
 \newcommand{\blogtitle}[1]{\#1}
 \newcommand{\blogdate}[1]{~~~<p><span class="blog-date">#1</span></p>~~~}
+
+generate_rss = true
+rss_website_title = "SPMD, SIMD, and Loop Compilation"
+rss_website_descr = "Topics on Focusing on Performance Optimization, with a focus on loops and SIMD"
+rss_website_url   = "https://spmd.org"
+rss_full_content = true
