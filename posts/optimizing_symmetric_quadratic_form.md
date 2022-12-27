@@ -190,7 +190,7 @@ That that `product_3` was executing over `50%` more scalar `MUOPS/s` than packed
 `product_1` did much better in this respect. It also had more instructions per branch.
 However, it did require much higher L2 to L1 load data, and thus also higher bandwidth, as we expected because it didn't take advantage of symmetry.
 
-CPI is cycles per instruction, the higher the value, the more clock cycles were required per instruction. We see that the execution stall rate was higher for `product_4`.
+CPI is cycles per instruction, the higher the value, the more clock cycles were required per instruction. We see that the execution stall rate was higher for `product_3`.
 
 For comparison, this is the symmetric `product_2`:
 ```julia
