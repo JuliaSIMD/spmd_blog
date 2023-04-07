@@ -157,7 +157,7 @@ int main() {
   printf("v[1] = %f\n", v[1]);
   setInd(&v, 1, v);
   const std::vector<double> &vref = v;
-  setInd(&v, 1, v);
+  setInd(&vref, 1, 11.0);
   return 0;
 }
 ```
