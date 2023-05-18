@@ -26,7 +26,7 @@ There are all sorts of combinations, but sticking to these three covers most use
 The next thing to keep in mind is that a value's destructor is called as soon as it leaves a scope.
 Most objects in C++ have RAII; this means that creating the object allocates its resources (so creating or pushing into a vector allocates the memory it needs), and its destruction frees that memory.
 
-```c++
+```cpp
 #include <vector>
 
 bar(const std::vector<double>&);
@@ -50,7 +50,7 @@ However, performant Julia code is heavily reliant on an optimization called devi
 
 While C++ only has single dispatch, it has function overloading. Function overloading lets you pick the method that gets called based on the combination of all types, but this must happen at compile time.
 That is, as long as all types are known at compile time -- which is the vast majority of use cases in Julia -- we can treat overloading in C++ just like multiple dispatch in Julia:
-```c++
+```cpp
 #include <concepts>
 #include <cstdio>
 
@@ -78,7 +78,7 @@ That is, you can think of overloading as multiple dispatch, with the requirement
 ### Concepts
 
 C++20 also brings introduces concepts, which allow you to control dispatches based on what types are capable of.
-```c++
+```cpp
 #include <array>
 #include <cstddef>
 #include <cstdio>
@@ -123,12 +123,13 @@ Thus, rather than defining abstract type trees like in Julia, we can dispatch ba
 Type trees are not always sufficient. Things like `Base.StridedArray` are messy
 ```julia
 julia> Base.StridedArray
-StridedArray (alias for Union{DenseArray{T, N}, Base.ReinterpretArray{T, N, S, A, IsReshaped} where {A<:Union{SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, IsReshaped, S}, Base.ReshapedArray{T, N, A} where A<:Union{Base.ReinterpretArray{T, N, S, A, IsReshaped} where {T, N, A<:Union{SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, IsReshaped, S}, SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, SubArray{T, N, A, I} where {A<:Union{Base.ReinterpretArray{T, N, S, A, IsReshaped} where {T, N, A<:Union{SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, IsReshaped, S}, Base.ReshapedArray{T, N, A} where {T, N, A<:Union{Base.ReinterpretArray{T, N, S, A, IsReshaped} where {T, N, A<:Union{SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, IsReshaped, S}, SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}}, DenseArray}, I<:Tuple{Vararg{Union{Base.AbstractCartesianIndex, Base.ReshapedArray{T, N, A, Tuple{}} where {T, N, A<:AbstractUnitRange}, Union{AbstractRange{<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}}, var"#s93"} where var"#s93"<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}}}}}} where {T, N})
+StridedArray (alias for Union{DenseArray{T, N}, Base.ReinterpretArray{T, N, S, A, IsReshaped} where {A<:Union{SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, IsReshaped, S}, Base.ReshapedArray{T, N, A} where A<:Union{Base.ReinterpretArray{T, N, S, A, IsReshaped} where {T, N, A<:Union{SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, IsReshaped, S}, SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, SubArray{T, N, A, I} where {A<:Union{Base.ReinterpretArray{T, N, S, A, IsReshaped} where {T, N, A<:Union{SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, IsReshaped, S}, Base.ReshapedArray{T, N, A} where {T, N, A<:Union{Base.ReinterpretArray{T, N, S, A, IsReshaped} where {T, N, A<:Union{SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}}, Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}, IsReshaped, S}, SubArray{T, N, A, I, true} where {T, N, A<:DenseArray, I<:Union{Tuple{Vararg{Real}},
+Tuple{AbstractUnitRange, Vararg{Any}}}}, DenseArray}}, DenseArray}, I<:Tuple{Vararg{Union{Base.AbstractCartesianIndex, Base.ReshapedArray{T, N, A, Tuple{}} where {T, N, A<:AbstractUnitRange}, Union{AbstractRange{<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}}, var"#s93"} where var"#s93"<:Union{Int128, Int16, Int32, Int64, Int8, UInt128, UInt16, UInt32, UInt64, UInt8}}}}}} where {T, N})
 ```
 and excludes actually strided arrays like `StaticArrays.MArray` that could dispatch on `BLAS` and `LAPACK` routines, while including arrays like [GPUArrays](https://github.com/JuliaGPU/GPUArrays.jl/blob/cd237a4f77ddfaeea6d01c6ea84ca02e71da3108/src/device/abstractarray.jl#L15) that can't.
 Not to mention the mess around what is a mutable array.
 
-```c++
+```cpp
 #include <array>
 #include <cstddef>
 #include <cstdio>
@@ -162,10 +163,15 @@ int main() {
 }
 ```
 I get
-```
+```sh
 v[1] = 1.000000
 oops! Should implement an out of place operator?
 oops! Should implement an out of place operator?
 ```
 So the first `setInd` worked, but setting an illegal type (we can't store a `vector<double>` into a `vector<double>`!), or setting into a constant array of course do not!
 
+When implementing your own classes, `static_assert`-ing that they meet a concept is useful, as then you'll get error messages directly in your editor telling you which methods of the interface you still need to implement.
+
+### Iterators
+
+Much of the C++ standard library is based on iterator concept. For many classes, it's easy to implement.
