@@ -23,6 +23,44 @@
 
 <item>
   <title>
+    <![CDATA[  Posts  ]]>
+  </title>
+  <link> https://spmd.org/index.html </link>
+  <guid> https://spmd.org/index.html </guid>
+  <description>
+    <![CDATA[  A short description of the page which would serve as <strong>blurb</strong> in a <code>RSS</code> feed; you can use basic markdown here but the whole description string must be a single line &#40;not a multiline string&#41;. Like this one for instance. Keep in mind that styling is minimal in RSS so for instance don&#39;t expect maths or fancy styling to work; images should be ok though: <img src="https://upload.wikimedia.org/wikipedia/en/3/32/Rick_and_Morty_opening_credits.jpeg" alt="" />  ]]>
+  </description>  
+    
+  <pubDate>Thu, 18 May 2023 00:00:00 +0000</pubDate>  
+  
+  
+  <atom:author>
+    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
+  </atom:author>
+        
+</item>
+
+<item>
+  <title>
+    <![CDATA[  C&#43;&#43;  ]]>
+  </title>
+  <link> https://spmd.org/posts/cpp/index.html </link>
+  <guid> https://spmd.org/posts/cpp/index.html </guid>
+  <description>
+    <![CDATA[  c&#43;&#43; intro  ]]>
+  </description>  
+    
+  <pubDate>Thu, 06 Apr 2023 00:00:00 +0000</pubDate>  
+  
+  
+  <atom:author>
+    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
+  </atom:author>
+        
+</item>
+
+<item>
+  <title>
     <![CDATA[  Optimizing Symmetric Quadratic Form  ]]>
   </title>
   <link> https://spmd.org/posts/optimizing_symmetric_quadratic_form/index.html </link>
@@ -146,25 +184,6 @@
   </description>  
     
   <pubDate>Wed, 02 Mar 2022 00:00:00 +0000</pubDate>  
-  
-  
-  <atom:author>
-    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
-  </atom:author>
-        
-</item>
-
-<item>
-  <title>
-    <![CDATA[  Posts  ]]>
-  </title>
-  <link>  </link>
-  <guid>  </guid>
-  <description>
-    <![CDATA[  A short description of the page which would serve as <strong>blurb</strong> in a <code>RSS</code> feed; you can use basic markdown here but the whole description string must be a single line &#40;not a multiline string&#41;. Like this one for instance. Keep in mind that styling is minimal in RSS so for instance don&#39;t expect maths or fancy styling to work; images should be ok though: <img src="https://upload.wikimedia.org/wikipedia/en/3/32/Rick_and_Morty_opening_credits.jpeg" alt="" />  ]]>
-  </description>  
-    
-  <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>  
   
   
   <atom:author>
