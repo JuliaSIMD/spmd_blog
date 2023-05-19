@@ -530,3 +530,13 @@ which of course has $\Delta\omega \ne 0$.
 
 However, the important thing is that our dependence edges were built in the transformed problem, and it's relatively straightforward to apply these omegas as shifts in indices, without needing to do as much analysis as option $1$ implemented as a pure post-processing step.
 
+However, the offset to loop and $\omega$ shift transformation must be applied on a per-store basis, as stores must be assigned the same schedule as all loads feeding directly into them. Thus, transformations must be applied to operations in these sets. We must search for conflicts within these sets that would result in removing one offset simply adding it elsewhere.
+That is, for each store, we can check all edges connected to that store and its directly connected loads, and update these together as a set; we must ensure that this group update is a simplification.
+For example:
+```julia
+truncaxes(A, n) = firstindex(A,n):lastindex(A,n)-1
+for j = truncaxes(A,2), i = truncaxes(A,1)
+    A[i+1,j+1] = A[i+1,j] + A[i,j+1]
+end
+```
+The two loads have direct connections to the store, thus all three memory operations must be shifted as a group. We cannot shift `i` or `j` for the set of all three operations in a way that would actually remove the offset from the $E$ matrix of the dependence polyhedra, thus we must keep these offsets.
