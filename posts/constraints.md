@@ -497,3 +497,36 @@ checksat(c, C2) # success
 
 That said, we know enough to come up with solutions.
 Let's first consider options.
+
+One possibility is of course fixing it when laying out the operations. Because `trisolve_ω0!` and `trisolve_ω1!` are equivalent in order, it is of course possible to figure out how we can generate `trisolve_ω0!` from `trisolve_ω1!`'s schedule. An approach may be to check when we have non-zero omegas. If we have $\omega=1$, but no parents within the given loop iteration, we can move the operation to the end of the previous iteration. Similarly, $\omega=-1$ without children within an iteration could be shifted to the start of the next iteration.
+
+Another possibility is to try and change the problem we solve, such that the constant offset between indices is $0$. There are a few different approaches we could imagine taking here, e.g. shifting the polyehdra, or transferring offsets into $\omega$s within the simplices we build.
+
+The first approach is reasonable, and can be done in conjunction with the second approach.
+However, I am taking the second approach first, because intuitively, we would like solving for $\Delta\omega=0$ in the LP step to also mean solving for having values associated with the same address loaded at the same time, potentially allowing us to reduce the number of load and store operations needed, or at least increase locality.
+
+Exploring the second option in more depth, the question is, at what point do we apply the adjustment, and where?
+I think we should leave the array indices, loop nest objects, and even dependence polyhedra unchanged. Instead, we can update the constraint systems to reflect applying a shift.
+
+This is an easily invertible linear transform that can be applied to both sides of the simplices when we use them to check the direction of each dependency (we glossed over this earlier in the blog post, but the basic approach: construct mirroring simplices assuming opposite directions, and then check which is violated [we currently don't support dependencies that switch direction, which is another TODO in the future; one can break the iteration space into regions corresponding to each direction]).
+We can solve this transformed problem (which can be fast - $\boldsymbol{\lambda}_12=1$, as discussed before), and then easily recover the solution in the original space
+```julia-repl
+julia> checksat(c, C2) # feasible, as before 
+
+julia> csol = Int.((W.//1)\c)
+8-element Vector{Int64}:
+  1
+  0
+  0
+  0
+ -1
+  0
+  1
+  1
+  
+julia> checksat(csol, C) # feasible
+```
+which of course has $\Delta\omega \ne 0$.
+
+However, the important thing is that our dependence edges were built in the transformed problem, and it's relatively straightforward to apply these omegas as shifts in indices, without needing to do as much analysis as option $1$ implemented as a pure post-processing step.
+
