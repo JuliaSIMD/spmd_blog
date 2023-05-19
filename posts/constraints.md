@@ -66,7 +66,7 @@ That is, all arrays become 0-indexed (which is most convenient), and all loops s
 
 Intuitively, both versions of the code represent the exact same program with the same traversal order of memory addresses, and thus should be interpreted the same way.
 
-However, let us consider the dependence between the store `A[m,n] = A[m,n] / U[n,n]`, and the loads used for updating in the inner loop, that is `A[m, k]` for the first version:
+To understand an issue with the second representation let us first consider the dependence between the store `A[m,n] = A[m,n] / U[n,n]`, and the loads used for updating in the inner loop, that is `A[m, k]` for the first version:
 ```julia
 A[m, k] = A[m, k] - A[m, n] * U[n, k]
 ```
@@ -125,24 +125,67 @@ Our dependence constraint system for this relation is thus (we have a dependence
 1\\M\\N\\m_t\\n_t\\m_s\\n_s\\k_s
 \end{bmatrix}\\
 \end{align}
-
-For the second example, our individual constraint systems look like
+However, for ease of comparison with the second example, let us shift this to use 0-based indexing:
 \begin{align}
 \begin{bmatrix}
-0 & 0 & 0 & 1 & 0\\
-0 & 0 & 0 & 0 & 1\\
--1 & 1 & 0 & -1 & 0\\
--1 & 0 & 1 & 0 & -1\\
+0 & 0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 0 & 1 \\
+-1 & 1 & 0 & -1 & 0 \\
+-1 & 0 & 1 & 0 & -1 \\
 \end{bmatrix}\begin{bmatrix}
 1\\M\\N\\m_t\\n_t
 \end{bmatrix}\ge\textbf{0}\\
 \begin{bmatrix}
-0 & 0 & 0 & 1 & 0 & 0\\
-0 & 0 & 0 & 0 & 1 & 0\\
-0 & 0 & 0 & 0 & -1 & 1\\
--1 & 1 & 0 & -1 & 0 & 0\\
--1 & 0 & 1 & 0 & -1 & 0\\
--1 & 0 & 1 & 0 &  0 & -1\\
+0 & 0 & 0 & 1 & 0 & 0 \\
+0 & 0 & 0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 0 & -1 & 1 \\
+-1 & 1 & 0 & -1 & 0 & 0 \\
+-1 & 0 & 1 & 0 & -1 & 0 \\
+-1 & 0 & 1 & 0 & 0 & -1 \\
+\end{bmatrix}\begin{bmatrix}
+1\\M\\N\\m_s\\n_s\\k_s
+\end{bmatrix}\ge\textbf{0}\\
+\end{align}
+Our dependence constraint system for this relation is thus (we have a dependence when $m_s=m_t$ and $k_s=n_t$):
+\begin{align}
+\textbf{A}_1&=\begin{bmatrix}
+0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+-1 & 1 & 0 & -1 & 0 & 0 & 0 & 0 \\
+-1 & 0 & 1 & 0 & -1 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & -1 & 1 \\
+-1 & 1 & 0 & 0 & 0 & -1 & 0 & 0 \\
+-1 & 0 & 1 & 0 & 0 & 0 & -1 & 0 \\
+-1 & 0 & 1 & 0 & 0 & 0 & 0 & -1 \\
+\end{bmatrix}\\
+\textbf{E}_1&=
+\begin{bmatrix}
+0&0&0& 1 & 0 & -1 & 0 & 0\\
+0&0&0& 0 & 1 & 0 & 0 & -1\\
+\end{bmatrix}\\
+\end{align}
+
+
+
+For the second example, our individual constraint systems look like
+\begin{align}
+\begin{bmatrix}
+0 & 0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 0 & 1 \\
+-1 & 1 & 0 & -1 & 0 \\
+-1 & 0 & 1 & 0 & -1 \\
+\end{bmatrix}\begin{bmatrix}
+1\\M\\N\\m_t\\n_t
+\end{bmatrix}\ge\textbf{0}\\
+\begin{bmatrix}
+0 & 0 & 0 & 1 & 0 & 0 \\
+0 & 0 & 0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 0 & 0 & 1 \\
+-1 & 1 & 0 & -1 & 0 & 0 \\
+-1 & 0 & 1 & 0 & -1 & 0 \\
+-2 & 0 & 1 & 0 & -1 & -1 \\
 \end{bmatrix}\begin{bmatrix}
 1\\M\\N\\m_s\\n_s\\k_s
 \end{bmatrix}\ge\textbf{0}\\
@@ -150,16 +193,16 @@ For the second example, our individual constraint systems look like
 and our dependence constraints are
 \begin{align}
 \textbf{A}_2&=\begin{bmatrix}
-0 & 0 & 0 & 1 & 0 & 0 & 0 & 0\\
-0 & 0 & 0 & 0 & 1 & 0 & 0 & 0\\
--1 & 1 & 0 & -1 & 0 & 0 & 0 & 0\\
--1 & 0 & 1 & 0 & -1 & 0 & 0 & 0\\
-0 & 0 & 0 & 0 & 0 & 1 & 0 & 0\\
-0 & 0 & 0 & 0 & 0 & 0 & 1 & 0\\
-0 & 0 & 0 & 0 & 0 & 0 & -1 & 1\\
--1 & 1 & 0 & 0 & 0 & -1 & 0 & 0\\
--1 & 0 & 1 & 0 & 0 & 0 & -1 & 0\\
--1 & 0 & 1 & 0 & 0 & 0 &  0 & -1\\
+0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 \\
+-1 & 1 & 0 & -1 & 0 & 0 & 0 & 0 \\
+-1 & 0 & 1 & 0 & -1 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 \\
+-1 & 1 & 0 & 0 & 0 & -1 & 0 & 0 \\
+-1 & 0 & 1 & 0 & 0 & 0 & -1 & 0 \\
+-2 & 0 & 1 & 0 & 0 & 0 & -1 & -1 \\
 \end{bmatrix}\\
 \textbf{E}_2&=\begin{bmatrix}
 0&0&0& 1 & 0 & -1 & 0 & 0\\
@@ -219,8 +262,8 @@ Our linear program's objective function minimizes this (as well as the $\phi$ va
 But, here we have a problem. Let's look at the first row of $\begin{bmatrix}\textbf{A}'&\textbf{E}'&-\textbf{E}'\end{bmatrix}$ for our first example:
 \begin{align}
 \begin{bmatrix}
-1 & -1 & -1 & 0 & 0 & -1 & -1 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 \\
-0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+1 & 0 & 0 & -1 & -1 & 0 & 0 & 0 & -1 & -1 & -1 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 1 & 0 & 0 & 0 & 0 \\
 0 & 1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & -1 & 0 \\
 0 & 0 & 1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & -1 \\
@@ -240,13 +283,13 @@ But, here we have a problem. Let's look at the first row of $\begin{bmatrix}\tex
 second is
 \begin{align}
 \begin{bmatrix}
-1 & 0 & 0 & -1 & -1 & 0 & 0 & 0 & -1 & -1 & -1 & 0 & -1 & 0 & 1 \\
+1 & 0 & 0 & -1 & -1 & 0 & 0 & 0 & -1 & -1 & -2 & 0 & -1 & 0 & 1 \\
 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 1 & 0 & 0 & 0 & 0 \\
 0 & 1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & -1 & 0 \\
 0 & 0 & 1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & -1 \\
 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & -1 & 0 & 0 & -1 & 0 & 1 & 0 \\
-0 & 0 & 0 & 0 & 0 & 0 & 1 & -1 & 0 & -1 & 0 & 0 & -1 & 0 & 1 \\
+0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & -1 & -1 & 0 & -1 & 0 & 1 \\
 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & -1 & 0 & -1 & 0 & 1 \\
 \end{bmatrix}
 \begin{bmatrix}
@@ -271,7 +314,99 @@ For the second example, we have
 \boldsymbol{\phi}_s &= \begin{bmatrix}0&1&1\end{bmatrix}\\
 \end{align}
 
-Putting these into an LP solver however shows that the first is infeasible
+We could put these into a linear program solver, but it should be quickly apparent -- or at least easy to confirm -- that valid solutions are to set the $\boldsymbol{\lambda}_12=1$, and all others to $0$:
+\begin{align}
+\begin{bmatrix}
+1 & 0 \\
+0 & 0 \\
+0 & 0 \\
+0 & 0 \\
+0 & 1 \\
+0 & 0 \\
+0 & 0 \\
+0 & -1 \\
+\end{bmatrix}\begin{bmatrix}\lambda_0\\1\end{bmatrix}
+&=
+\begin{bmatrix}
+0\\0\\0\\0\\1\\0\\0\\-1
+\end{bmatrix}\\
+\begin{bmatrix}
+1 & -1 \\
+0 & 0 \\
+0 & 0 \\
+0 & 0 \\
+0 & 1 \\
+0 & 0 \\
+0 & -1 \\
+0 & -1 \\
+\end{bmatrix}\begin{bmatrix}\lambda_0\\1\end{bmatrix}
+&=
+\begin{bmatrix}
+0\\0\\0\\0\\1\\0\\-1\\-1
+\end{bmatrix}\\
+\end{align}
+For the first example, we can set $\lambda_0=0$, while for the second we must set $\lambda_0=1$, which isn't a problem.
+The $\boldsymbol{\lambda}_12$ came from the equality matrix, setting the loop induction variables into each of the array's dimensions as equal. We have two copies of these columns, with sign flipped.
+This suggests matching schedules that line up with the indices used for indexing into arrays is relatively straightforward: we don't have to search for optimal $\boldsymbol{\lambda}$ values very long. If the offset is $0$, as in the first example, we can immediately find the combination that equals the corresponding schedule, without needing to run a linear program.
+
+However, if we have an offset, the direction matters. If it is positive, $\lambda_0$ picks up the slack. Else, we need to check if some linear combination of the other rows can compensate (by running the linear program solver), possibly resorting to non-zero $\Delta\omega$.
+
+Let's look at an example, from this very same loop nest.
+Earlier, we compared the reduction load in the inner most loop with the store $A[m,n] /= U[n,n]$. This store happens after the reduction load.
+But what about the store $A[m, n] = B[m, n]$? This store happens before the reduction load, thanks to being split into an earlier loop in the original source.
+
+This means, we're in almost the same situation as before, but the source and target roles are switched; for the first example:
+\begin{align}
+\begin{bmatrix}
+1 & 0 & 0 & -1 & -1 & 0 & 0 & 0 & -1 & -1 & -1 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 1 & 0 & 0 & 0 & 0 \\
+0 & 1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & -1 & 0 \\
+0 & 0 & 1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & -1 \\
+0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & -1 & 0 & 0 & -1 & 0 & 1 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 1 & -1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & -1 & 0 & -1 & 0 & 1 \\
+\end{bmatrix}
+\begin{bmatrix}
+\lambda_0\\
+\boldsymbol{\lambda}
+\end{bmatrix}
+&=
+\begin{bmatrix}
+\left(\omega_t-\omega_s\right)\\0\\0\\-\boldsymbol{\phi}_s\\\boldsymbol{\phi}_t
+\end{bmatrix}
+\end{align}
+second is
+\begin{align}
+\begin{bmatrix}
+1 & 0 & 0 & -1 & -1 & 0 & 0 & 0 & -1 & -1 & -2 & 0 & -1 & 0 & 1 \\
+0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 0 & 0 \\
+0 & 0 & 0 & 0 & 1 & 0 & 0 & 0 & 0 & 1 & 1 & 0 & 0 & 0 & 0 \\
+0 & 1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & -1 & 0 \\
+0 & 0 & 1 & 0 & -1 & 0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & -1 \\
+0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & -1 & 0 & 0 & -1 & 0 & 1 & 0 \\
+0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & -1 & -1 & 0 & -1 & 0 & 1 \\
+0 & 0 & 0 & 0 & 0 & 0 & 0 & 1 & 0 & 0 & -1 & 0 & -1 & 0 & 1 \\
+\end{bmatrix}
+\begin{bmatrix}
+\lambda_0\\
+\boldsymbol{\lambda}
+\end{bmatrix}
+&=
+\begin{bmatrix}
+\left(\omega_t-\omega_s\right)\\0\\0\\-\boldsymbol{\phi}_s\\\boldsymbol{\phi}_t
+\end{bmatrix}
+\end{align}
+
+Because we do not have an offset in the first example, the solution is exactly as it was before: $\boldsymbol{\lambda}_12=1$, and all others, including $\lambda_0$, are $0$.
+However, because $\lambda$s are non-negative, our previous solution cannot be adapted.
+Note that we have 
+\begin{align}
+\boldsymbol{\phi}_s &= \begin{bmatrix}0&1\end{bmatrix}\\
+\boldsymbol{\phi}_t &= \begin{bmatrix}0&1&1\end{bmatrix}\\
+\end{align}
+
+So let's try running a linear program where we force $\Delta\omega=0$ to see if any feasible solution exists at all:
 ```julia
 using JuMP, HiGHS
 function checksat(c, C)
@@ -284,6 +419,81 @@ function checksat(c, C)
   optimize!(model)
   return model
 end
-
-
+c = [0; 0; 0; 0; -1; 0; 1; 1];
+C = [
+ 1  0  0  -1  -1  0  0   0  -1  -1  -1   0  -1   0   1
+ 0  0  0   1   0  0  0   0   1   0   0   0   0   0   0
+ 0  0  0   0   1  0  0   0   0   1   1   0   0   0   0
+ 0  1  0  -1   0  0  0   0   0   0   0   1   0  -1   0
+ 0  0  1   0  -1  0  0   0   0   0   0   0   1   0  -1
+ 0  0  0   0   0  1  0   0  -1   0   0  -1   0   1   0
+ 0  0  0   0   0  0  1  -1   0  -1   0   0  -1   0   1
+ 0  0  0   0   0  0  0   1   0   0  -1   0  -1   0   1
+];
+checksat(c, C)
+# Problem status detected on presolve: Infeasible
 ```
+Uh oh!
+So what's the problem with simply moving ahead and accepting non-zero $\Delta\omega$?
+It has the effect of shifting operations across loop iterations. If we plow forward from here and satisfy all our constraints, we could end up with a solution such as:
+```julia
+function trisolve_ω1!(_A, _B, _U)
+  A = OffsetArray(_A, -1, -1)
+  B = OffsetArray(_B, -1, -1)
+  U = OffsetArray(_U, -1, -1)
+  M, N = size(A)
+  for n = 0:N-1
+    Unn = n == 0 ? zero(eltype(U)) : U[n-1, n-1]
+    for m = 0:M-1
+      Amn = A[m, n] = B[m, n]
+      n > 0 && (A[m, n-1] /= Unn)
+      for k = 0:n-1
+        Amn -= A[m, k] * U[k, n]
+      end
+      A[m, n] = Amn
+    end
+  end
+  let n = N
+    Unn = U[n-1, n-1]
+    for m = 0:M-1
+      A[m, n-1] /= Unn
+    end
+  end
+end
+```
+instead of the much simpler
+```julia
+function trisolve_ω0!(_A, _B, _U)
+  A = OffsetArray(_A, -1, -1)
+  B = OffsetArray(_B, -1, -1)
+  U = OffsetArray(_U, -1, -1)
+  M, N = size(A)
+  for n = 0:N-1
+    Unn = U[n, n]
+    for m = 0:M-1
+      Amn = B[m, n]
+      for k = 0:n-1
+        Amn -= A[m, k] * U[k, n]
+      end
+      A[m, n] = Amn / Unn
+    end
+  end
+end
+```
+which requires that all $\Delta\omega=0$.
+
+So there is obviously some failure in our analysis or representation if two representations of the same program could produce such different outcomes. It'd be great to try and understand this at a deeper level at some point. I imagine there is some insight there that I'm missing on why this should be so, that may also suggest an ideal solution.
+
+That is, why is something as simple as redefining $k^*_t = k_t+1$, a shift of part of the polyhedra, able to solve this problem? Looking at the numbers, I can see why, but that is purely mechanical, no geometric interpretation or insight.
+```julia
+using LinearAlgebra
+W = Matrix{Int}(I, size(C,1), size(C,1));
+W[1,end] = -1;
+# multiplying has the effect of subtracting the value of $k_t$
+# from row 1 of `C` (the constants row)
+C2 = W*C;
+checksat(c, C2) # success
+```
+
+That said, we know enough to come up with solutions.
+Let's first consider options.
