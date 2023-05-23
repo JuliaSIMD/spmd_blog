@@ -3,61 +3,55 @@
 
 <url>
     <loc>https://spmd.org/posts/constraints/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-</url>
-<url>
-    <loc>https://spmd.org/posts/dependency_analysis_example/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-</url>
-<url>
-    <loc>https://spmd.org/posts/dependency_polyehdra/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-</url>
-<url>
-    <loc>https://spmd.org/posts/farkas_lemma/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
+    <lastmod>2023-05-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
 </url>
 <url>
     <loc>https://spmd.org/posts/orthogonalizing_loops/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
+    <lastmod>2023-05-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
 </url>
 <url>
     <loc>https://spmd.org/posts/optimizing_symmetric_quadratic_form/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-</url>
-<url>
-    <loc>https://spmd.org/posts/ordering/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-</url>
-<url>
-    <loc>https://spmd.org/posts/cpp/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
+    <lastmod>2023-05-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
 </url>
 <url>
     <loc>https://spmd.org/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
+    <lastmod>2023-05-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+</url>
+<url>
+    <loc>https://spmd.org/posts/dependency_polyehdra/index.html</loc>
+    <lastmod>2023-05-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+</url>
+<url>
+    <loc>https://spmd.org/posts/ordering/index.html</loc>
+    <lastmod>2023-05-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+</url>
+<url>
+    <loc>https://spmd.org/posts/cpp/index.html</loc>
+    <lastmod>2023-05-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
 </url>
 <url>
     <loc>https://spmd.org/posts/unimodular/index.html</loc>
-    <lastmod>2023-05-22</lastmod>
+    <lastmod>2023-05-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+</url>
+<url>
+    <loc>https://spmd.org/posts/farkas_lemma/index.html</loc>
+    <lastmod>2023-05-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
 </url>
