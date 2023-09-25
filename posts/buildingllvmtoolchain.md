@@ -35,9 +35,11 @@ The major downside is that this requires changing the operating system, and tell
 
 ### Configuring LLVM
 
-With help from [this question](https://discourse.llvm.org/t/how-to-build-libc-with-pstl-support/69341), I landed on this cmake config
+With help from [this question](https://discourse.llvm.org/t/how-to-build-libc-with-pstl-support/69341), I landed on this cmake config (NOTE: if you are not on Apple, do not run this before applying the patch presented below)
 ```sh
-cmake -G "Ninja" \
+$ git clone https://github.com/llvm/llvm-project.git
+$ mkdir llvm-project/builddir && llvm-project/builddir
+$ cmake -G "Ninja" \
       -DCMAKE_C_COMPILER=/usr/bin/clang \
       -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
       -DLLVM_USE_LINKER=lld \
@@ -56,7 +58,7 @@ cmake -G "Ninja" \
       -DLIBCXX_USE_COMPILER_RT=YES \
       -DLIBCXXABI_USE_COMPILER_RT=YES \
       -DLIBCXXABI_USE_LLVM_UNWINDER=YES \
-      -DLIBUNWIND_USE_COMPILER_RT=Yes \
+      -DLIBUNWIND_USE_COMPILER_RT=YES \
       -DBOOTSTRAP_CMAKE_BUILD_TYPE=Release \
       -DBOOTSTRAP_LLVM_ENABLE_PROJECTS="clang;lld;lldb" \
       -DBOOTSTRAP_LLVM_ENABLE_RUNTIMES="compiler-rt;libc;libcxx;libcxxabi;libunwind" \
@@ -65,12 +67,35 @@ cmake -G "Ninja" \
       -DBOOTSTRAP_LIBCXX_USE_COMPILER_RT=YES \
       -DBOOTSTRAP_LIBCXXABI_USE_COMPILER_RT=YES \
       -DBOOTSTRAP_LIBCXXABI_USE_LLVM_UNWINDER=YES \
-      -DBOOTSTRAP_LIBUNWIND_USE_COMPILER_RT=Yes \
+      -DBOOTSTRAP_LIBUNWIND_USE_COMPILER_RT=YES \
       -DBOOTSTRAP_LLVM_USE_LINKER=lld \
       ../llvm
+$ cmake --build .
+$ cmake --build . --target runtimes
+$ cmake --build . --target install
 ```
-This would produce an llvm binary that would install in `~/.local/stow/llvm`.
+This would produce an llvm binary that would install in `~/.local/stow/llvm`. You can then run `cd ~/.local/stow && sudo stow llvm -t /usr/local` to install it.
+Alternatively, setting `~/.local` as the prefix and setting your paths may work just as well; I still had to run
+```sh
+sudo ldconfig /usr/local/lib/x86_64-unknown-linux-gnu/
+```
+The install target also performed compilation, so I really wanted to avoid using `sudo` for it.
 
+With this, I had an installed `clang++` binary on my path that could find its headers and `libc++`, which it used by default. This could successfully compile my test C++20 and C++23 projects (that were restricted to [the features clang 17 supports](https://en.cppreference.com/w/cpp/23)) when not using sanitizers.
+
+However, it failed to find the sanitizer runtime libraries, because they were not there!
+They should be a part of `compiler-rt`, and are built as part of `compiler-rt` when including it among the `*LLVM_ENABLE_PROJECTS` instead of `*LLVM_ENABLE_RUNTIMES`.
+However, I didn't try the minimal diff from the above cmake config to see if this would still produce a working clang. Starting from a more minimal diff, clang failed to find include files.
+
+I didn't want to just make random changes without understanding what is going on and recompiling in hopes of fixing the problem, so I decided to dig into the `CMakeLists.txt` files to look at options.
+I debugging the `CMakeLists.txt` via inserting tons of `message` commands of the form:
+```cmake
+message(STATUS, "some_variable = ${some_variable}")
+message(FATAL_ERROR "some_other_variable = ${some_other_variable}")
+```
+and rerunning the big cmake configuration command (which I placed in a script). The messages let me see the values of variables at different points, and whether certain files were being included.
+This print debugging can lead you through the call graph, eventually noticing that a file is being included that is meant to define the valid sanitizers, but ended up defining them all as invalid due to not detecting the host's CPU architecture. This bug is on the non-Apple path of the control flow, so as a work around I added a `detect_target_arch()` call at the top of the `else()`/non-Apple branch ahead of target filtering.
+Workaround only, probably not the correct fix -- would need to double check if we reach this code when building compiler-rt as a project, and if so where the architecture was detected to determine if there should be a change there to support it when building the rt as a runtime.
 ```diff
 diff --git a/compiler-rt/cmake/config-ix.cmake b/compiler-rt/cmake/config-ix.cmake
 index 8d3dc8d208b2..c6daa35f9622 100644
@@ -86,6 +111,17 @@ index 8d3dc8d208b2..c6daa35f9622 100644
      ${ALL_SANITIZER_COMMON_SUPPORTED_ARCH})
 ```
 
+With this, and a `ninja runtimes`, I finally built the sanitizers.
 
+My project still wouldn't compile with sanitizers, because CMake said clang couldn't compile a simple test program, getting undefined references to the unwind library. I'm not sure what the best way to address this is, but I simply added 
+```cmake
+if(((USE_SANITIZER MATCHES "([Aa]ddress)") OR (USE_SANITIZER MATCHES "([Aa]ddress);([Uu]ndefined)"
+                                               )
+) AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
+  set(CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -lunwind -Wno-unused-command-line-argument")
+endif()
+```
+to link `lunwind`. This had to be added to the top of the `CMakeLists.txt`, so that it could apply to all dependencies. This also required the `-Wno-unused-command-line-argument` argument to avoid errors from unused command line arguments; apparently we only need to link libunwind occasionally. It'd be great if Clang could do so automatically when needed and we didn't need to suppress a warning. It'd also be great if we could use better hygiene in our CMakeLists, but I fear we need to apply this to all targets as a workaround for this failure to bring in `libunwind` automatically (which I'd like to call a bug, but perhaps it is only behavior I dislike and is working as intended?).
 
+With this, I could finally compile and run using asan + ubsan.
 
