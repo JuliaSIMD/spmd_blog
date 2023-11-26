@@ -23,6 +23,25 @@
 
 <item>
   <title>
+    <![CDATA[  Competing with C&#43;&#43; with Julia in multithreaded, allocating code  ]]>
+  </title>
+  <link> https://spmd.org/posts/multithreadedallocations/index.html </link>
+  <guid> https://spmd.org/posts/multithreadedallocations/index.html </guid>
+  <description>
+    <![CDATA[  Improving performance with multithreaded workloads  ]]>
+  </description>  
+    
+  <pubDate>Sun, 26 Nov 2023 00:00:00 +0000</pubDate>  
+  
+  
+  <atom:author>
+    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
+  </atom:author>
+        
+</item>
+
+<item>
+  <title>
     <![CDATA[  Analyzing constraints  ]]>
   </title>
   <link> https://spmd.org/posts/constraints/index.html </link>

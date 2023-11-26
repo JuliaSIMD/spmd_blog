@@ -1,0 +1,609 @@
+<!doctype html> <html lang=en > <meta charset=UTF-8 > <meta name=viewport  content="width=device-width, initial-scale=1"> <link rel=stylesheet  href="/libs/highlight/github.min.css"> <link rel=stylesheet  href="/css/tachyons.css"> <link rel=icon  href="/assets/favicon.png"> <link rel=preconnect  href="https://fonts.gstatic.com"> <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel=stylesheet > <title>Competing with C++ with Julia in multithreaded, allocating code</title> <style> body { font-size: 16px; background: #111111; line-height: 1.8; font-family: "PT Serif", sans-serif; margin: 0 auto 0 auto; color: #EEEEEE; } a { color: silver; border-bottom: 3px solid #e1e1e1; text-decoration: none; transition: opacity .15s ease-in; } a:hover,a:focus { color: #F4F4F4; border-bottom: 3px solid #c1c1c1; transition: opacity .15s ease-in; } .colbox-blue { background-color: #eef3f5; padding-top: 5px; padding-right: 10px; padding-left: 10px; padding-bottom: 5px; margin-left: 5px; margin-top: 5px; margin-bottom: 5px; border-radius: 0 10px 10px 0; border-left: 5px solid #4c9cf1; } blockquote { background: var(--block-background); border-left: 7px solid #a8a8a8; margin: 1.5em 10px; padding: 0.5em 10px; font-style: italic; } blockquote p { display: inline; } .hljs { font-family: "Fira Code", monospace; font-size: 14px; line-height: 1.35em; border-radius: 2px; } </style> <div class="pa5 pt4 pb4" style="margin: 0 auto; max-width: 900px; background: #333333"> <header> <div class="f2 lh-copy b"><a href="/" class="bn dim normal silver">Loop Compiler</a></div> <nav> <ul class="flex list pl0 bt bb b--light-silver mb4"> <li class="pa2 pl0"><a class="bn dim" href="/">Home</a> </ul> </nav> </header> <h1 class="f2 lh-title normal light-gray">Competing with C++ with Julia in multithreaded, allocating code</h1> <div class="f5 lh-copy i gray">2023-11-26</div> <div class=franklin-content > <h1 id=benchmarking_test_case ><a href="#benchmarking_test_case" class=header-anchor >Benchmarking test case</a></h1> <p>Our benchmark test case will be applying ForwardMode AD with dual numbers with dynamically sized square matrices of size 2x2...8x8 on multiple threads. We&#39;ll test no duals, and dual sizes <code>1:8</code> for single derivatives, and <code>1:8</code> by <code>1:2</code> for second derivatives. This gives us a large number of combinations, which increases the working memory we need a bit. We&#39;ll iterate over a range of scale factors, to hit different code-paths based on the op-norm of the matrices. For each scale factor, we&#39;ll iterate over all tested matrices to increase the working set of memory, to simulate more realistic workloads that may &#40;for example&#41; be solving a large number of affine differential equations as part of an optimization problem. For Julia, we&#39;ll be using <code>ForwardDiff.jl</code>, and for C&#43;&#43; we use an implementation from the LoopModels supporting math library.</p> <p>The function we&#39;re benchmarking:</p> <pre><code class="julia hljs"><span class=hljs-keyword >using</span> Base.Threads
+
+<span class=hljs-comment ># utilities for dealing with nested tuples</span>
+<span class=hljs-comment ># we use nested instead of flat tuples to avoid heuristics</span>
+<span class=hljs-comment ># that avoid specializing on long tuples</span>
+rmap(f, ::<span class=hljs-built_in >Tuple</span>{}) = ()
+rmap(f::F, x::<span class=hljs-built_in >Tuple</span>) <span class=hljs-keyword >where</span> {F} = map(f, x)
+rmap(f::F, x::<span class=hljs-built_in >Tuple</span>{<span class=hljs-built_in >Vararg</span>{<span class=hljs-built_in >Tuple</span>,K}}) <span class=hljs-keyword >where</span> {F,K} = map(Base.Fix1(rmap, f), x)
+rmap(f, ::<span class=hljs-built_in >Tuple</span>{}, ::<span class=hljs-built_in >Tuple</span>{}) = ()
+rmap(f::F, x::<span class=hljs-built_in >Tuple</span>, y::<span class=hljs-built_in >Tuple</span>) <span class=hljs-keyword >where</span> {F} = map(f, x, y)
+rmap(f::F, x::<span class=hljs-built_in >Tuple</span>{<span class=hljs-built_in >Vararg</span>{<span class=hljs-built_in >Tuple</span>,K}}, y::<span class=hljs-built_in >Tuple</span>{<span class=hljs-built_in >Vararg</span>{<span class=hljs-built_in >Tuple</span>,K}}) <span class=hljs-keyword >where</span> {F,K} = map((a,b)-&gt;rmap(f,a,b), x, y)
+<span class=hljs-comment ># rmaptnum applies `f` to a tuple of non - tuples</span>
+rmaptnum(f, ::<span class=hljs-built_in >Tuple</span>{}) = ()
+rmaptnum(f::F, x::<span class=hljs-built_in >Tuple</span>{<span class=hljs-built_in >Vararg</span>{<span class=hljs-built_in >Tuple</span>{<span class=hljs-built_in >Vararg</span>}}}) <span class=hljs-keyword >where</span> {F} = map(f, x)
+rmaptnum(f::F, x::<span class=hljs-built_in >Tuple</span>{<span class=hljs-built_in >Vararg</span>{<span class=hljs-built_in >Tuple</span>{<span class=hljs-built_in >Vararg</span>{<span class=hljs-built_in >Tuple</span>}}}}) <span class=hljs-keyword >where</span> {F} = map(Base.Fix1(rmaptnum,f), x)
+
+<span class=hljs-keyword >struct</span> SumScaleMatrixExponential{F}
+    f!::F
+    s::<span class=hljs-built_in >Float64</span>
+<span class=hljs-keyword >end</span>
+<span class=hljs-keyword >function</span> (sme::SumScaleMatrixExponential)(B, A)
+    <span class=hljs-keyword >for</span> i <span class=hljs-keyword >in</span> eachindex(B, A)
+        B[i] = sme.s * A[i]
+    <span class=hljs-keyword >end</span>
+    sme.f!(B)
+    <span class=hljs-keyword >return</span> sum(B)
+<span class=hljs-keyword >end</span>
+
+<span class=hljs-keyword >function</span> do_singlethreaded_work!(f!::F, Bs, As, r) <span class=hljs-keyword >where</span> {F}
+    ret = rmaptnum(zero ∘ eltype ∘ eltype, Bs)
+    <span class=hljs-keyword >for</span> s <span class=hljs-keyword >in</span> r
+        incr = rmap(SumScaleMatrixExponential(f!, s), Bs, As)
+        ret = rmap(+, ret, rmaptnum(sum,incr))
+    <span class=hljs-keyword >end</span>
+    <span class=hljs-keyword >return</span> ret
+<span class=hljs-keyword >end</span>
+
+<span class=hljs-keyword >function</span> do_multithreaded_work!(f!::F, Bs, As, r) <span class=hljs-keyword >where</span> {F}
+    nt = Threads.nthreads(:default)
+    nt &gt; <span class=hljs-number >1</span> || <span class=hljs-keyword >return</span> do_singlethreaded_work!(f!, Bs, As, r)
+    tasks = <span class=hljs-built_in >Vector</span>{<span class=hljs-built_in >Task</span>}(<span class=hljs-literal >undef</span>, nt)
+    <span class=hljs-keyword >for</span> n <span class=hljs-keyword >in</span> <span class=hljs-number >1</span>:nt        
+        subrange = r[n:nt:<span class=hljs-keyword >end</span>] <span class=hljs-comment ># stride to balance opnorms across threads</span>
+        Bsc = n == nt ? Bs : rmap(copy, Bs)
+        tasks[n] = Threads.<span class=hljs-meta >@spawn</span> do_singlethreaded_work!($f!, $Bsc, $As, $subrange)
+    <span class=hljs-keyword >end</span>
+    _ret = rmaptnum(zero ∘ eltype ∘ eltype, Bs)
+    ret::typeof(_ret) = Threads.fetch(tasks[<span class=hljs-number >1</span>])
+    <span class=hljs-keyword >for</span> n <span class=hljs-keyword >in</span> <span class=hljs-number >2</span>:nt
+        ret = rmap(+, ret, Threads.fetch(tasks[n]))
+    <span class=hljs-keyword >end</span>
+    <span class=hljs-keyword >return</span> ret
+<span class=hljs-keyword >end</span></code></pre> <pre><code class="julia hljs">do_multithreaded_work! (generic <span class=hljs-keyword >function</span> with <span class=hljs-number >1</span> method)</code></pre>
+<p>We need some boiler plate to deal with large numbers of different types in stable manner by iterating over tuples. The code calculates a matrix exponential after scaling an input, and accumulates a sum of the results. Lets create some test case matrices:</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >using</span> ForwardDiff
+max_size = <span class=hljs-number >5</span>;
+d(x, n) = ForwardDiff.Dual(x, ntuple(_-&gt;randn(), n))
+<span class=hljs-keyword >function</span> dualify(A, n, j)
+  n == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> A
+  j == <span class=hljs-number >0</span> ? d.(A, n) : d.(d.(A, n), j)
+<span class=hljs-keyword >end</span>
+randdual(n, dinner, douter) = dualify(rand(n,n), dinner, douter)
+As = map((<span class=hljs-number >0</span>,<span class=hljs-number >1</span>,<span class=hljs-number >2</span>)) <span class=hljs-keyword >do</span> dout <span class=hljs-comment ># outer dual</span>
+  map(ntuple(identity,<span class=hljs-built_in >Val</span>(<span class=hljs-number >9</span>)).-<span class=hljs-number >1</span>) <span class=hljs-keyword >do</span> din <span class=hljs-comment ># inner dual</span>
+    map(ntuple(identity,<span class=hljs-built_in >Val</span>(max_size-<span class=hljs-number >1</span>)).+<span class=hljs-number >1</span>) <span class=hljs-keyword >do</span> n <span class=hljs-comment ># matrix size</span>
+      randdual(n,din,dout)
+    <span class=hljs-keyword >end</span>
+  <span class=hljs-keyword >end</span>
+<span class=hljs-keyword >end</span>;
+Bs = rmap(similar, As);</code></pre>
+<p>Lets set C&#43;&#43; as a baseline with this. We&#39;ll base our implementation on <a href="https://github.com/JuliaArrays/StaticArrays.jl/blob/72d2bd3538235c9162f630a5130112b83eaa0af7/src/expm.jl#L75-L129">StaticArrays.exp</a>, as this implementation is simpler than the one from <code>ExponentialUtilities.jl</code>. The core of our C&#43;&#43; implementation is only 50 lines of code:</p>
+<pre><code class="cpp hljs"><span class=hljs-keyword >template</span> &lt;<span class=hljs-keyword >typename</span> T&gt; <span class=hljs-function ><span class=hljs-keyword >constexpr</span> <span class=hljs-type >void</span> <span class=hljs-title >expm</span><span class=hljs-params >(MutSquarePtrMatrix&lt;T&gt; A)</span> </span>{
+  <span class=hljs-type >ptrdiff_t</span> n = <span class=hljs-built_in >ptrdiff_t</span>(A.<span class=hljs-built_in >numRow</span>()), s = <span class=hljs-number >0</span>;
+  SquareMatrix&lt;T&gt; A2{SquareDims&lt;&gt;{{n}}}, U_{SquareDims&lt;&gt;{{n}}};
+  MutSquarePtrMatrix&lt;T&gt; U{U_};
+  <span class=hljs-keyword >if</span> (<span class=hljs-type >double</span> nA = <span class=hljs-built_in >opnorm1</span>(A); nA &lt;= <span class=hljs-number >0.015</span>) {
+    A2 &lt;&lt; A * A;
+    U &lt;&lt; A * (A2 + <span class=hljs-number >60.0</span> * I);
+    A &lt;&lt; <span class=hljs-number >12.0</span> * A2 + <span class=hljs-number >120.0</span> * I;
+  } <span class=hljs-keyword >else</span> {
+    SquareMatrix&lt;T&gt; B{SquareDims&lt;&gt;{{n}}};
+    <span class=hljs-keyword >if</span> (nA &lt;= <span class=hljs-number >2.1</span>) {
+      A2 &lt;&lt; A * A;
+      containers::TinyVector&lt;<span class=hljs-type >double</span>, <span class=hljs-number >5</span>&gt; p0, p1;
+      <span class=hljs-keyword >if</span> (nA &gt; <span class=hljs-number >0.95</span>) {
+        p0 = {<span class=hljs-number >1.0</span>, <span class=hljs-number >3960.0</span>, <span class=hljs-number >2162160.0</span>, <span class=hljs-number >302702400.0</span>, <span class=hljs-number >8821612800.0</span>};
+        p1 = {<span class=hljs-number >90.0</span>, <span class=hljs-number >110880.0</span>, <span class=hljs-number >3.027024e7</span>, <span class=hljs-number >2.0756736e9</span>, <span class=hljs-number >1.76432256e10</span>};
+      } <span class=hljs-keyword >else</span> <span class=hljs-keyword >if</span> (nA &gt; <span class=hljs-number >0.25</span>) {
+        p0 = {<span class=hljs-number >1.0</span>, <span class=hljs-number >1512.0</span>, <span class=hljs-number >277200.0</span>, <span class=hljs-number >8.64864e6</span>};
+        p1 = {<span class=hljs-number >56.0</span>, <span class=hljs-number >25200.0</span>, <span class=hljs-number >1.99584e6</span>, <span class=hljs-number >1.729728e7</span>};
+      } <span class=hljs-keyword >else</span> {
+        p0 = {<span class=hljs-number >1.0</span>, <span class=hljs-number >420.0</span>, <span class=hljs-number >15120.0</span>};
+        p1 = {<span class=hljs-number >30.0</span>, <span class=hljs-number >3360.0</span>, <span class=hljs-number >30240.0</span>};
+      }
+      <span class=hljs-built_in >evalpoly</span>(B, U, A2, p0);
+      U &lt;&lt; A * B;
+      <span class=hljs-built_in >evalpoly</span>(A, B, A2, p1);
+    } <span class=hljs-keyword >else</span> {
+      <span class=hljs-comment >// s = std::max(unsigned(std::ceil(std::log2(nA / 5.4))), 0);</span>
+      s = nA &gt; <span class=hljs-number >5.4</span> ? <span class=hljs-built_in >log2ceil</span>(nA / <span class=hljs-number >5.4</span>) : <span class=hljs-number >0</span>;
+      <span class=hljs-keyword >if</span> (s &amp; <span class=hljs-number >1</span>) {       <span class=hljs-comment >// we&#x27;ll swap `U` and `A` an odd number of times</span>
+        std::<span class=hljs-built_in >swap</span>(A, U); <span class=hljs-comment >// so let them switch places</span>
+        A &lt;&lt; <span class=hljs-function >U * <span class=hljs-title >exp2</span><span class=hljs-params >(-s)</span></span>;
+      } <span class=hljs-keyword >else</span> <span class=hljs-keyword >if</span> (s &gt; <span class=hljs-number >0</span>) A *= <span class=hljs-built_in >exp2</span>(-s);
+      A2 &lt;&lt; A * A;
+      <span class=hljs-comment >// here we take an estrin (instead of horner) approach to cut down flops</span>
+      SquareMatrix&lt;T&gt; A4{A2 * A2}, A6{A2 * A4};
+      B &lt;&lt; A6 * (A6 + <span class=hljs-number >16380</span> * A4 + <span class=hljs-number >40840800</span> * A2) +
+             (<span class=hljs-number >33522128640</span> * A6 + <span class=hljs-number >10559470521600</span> * A4 + <span class=hljs-number >1187353796428800</span> * A2) +
+             <span class=hljs-number >32382376266240000</span> * I;
+      U &lt;&lt; A * B;
+      A &lt;&lt; A6 * (<span class=hljs-number >182</span> * A6 + <span class=hljs-number >960960</span> * A4 + <span class=hljs-number >1323241920</span> * A2) +
+             (<span class=hljs-number >670442572800</span> * A6 + <span class=hljs-number >129060195264000</span> * A4 +
+              <span class=hljs-number >7771770303897600</span> * A2) +
+             <span class=hljs-number >64764752532480000</span> * I;
+    }
+  }
+  containers::<span class=hljs-built_in >tie</span>(A, U) &lt;&lt; containers::<span class=hljs-built_in >Tuple</span>(A + U, A - U);
+  LU::<span class=hljs-built_in >ldiv</span>(U, <span class=hljs-built_in >MutPtrMatrix</span>&lt;T&gt;(A));
+  <span class=hljs-keyword >for</span> (; s--; std::<span class=hljs-built_in >swap</span>(A, U)) U &lt;&lt; A * A;
+}</code></pre>
+<p>Now, to compile it</p>
+<pre><code class="julia hljs">withenv(<span class=hljs-string >&quot;CXX&quot;</span>=&gt;<span class=hljs-string >&quot;clang++&quot;</span>) <span class=hljs-keyword >do</span> <span class=hljs-comment ># clang++ is much faster than g++ here</span>
+  <span class=hljs-meta >@time</span> run(<span class=hljs-string >`cmake -S . -B buildclang -DCMAKE_BUILD_TYPE=Release -DCMAKE_UNITY_BUILD=ON`</span>)
+  <span class=hljs-meta >@time</span> run(<span class=hljs-string >`cmake --build buildclang`</span>)
+<span class=hljs-keyword >end</span></code></pre>
+<pre><code class="julia hljs">-- The CXX compiler identification is Clang <span class=hljs-number >17.0</span><span class=hljs-number >.5</span>
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check <span class=hljs-keyword >for</span> working CXX compiler: /bin/clang++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found Git: /bin/git (found version <span class=hljs-string >&quot;2.43.0&quot;</span>) 
+-- CPM: Adding package PackageProject.cmake@<span class=hljs-number >1.8</span><span class=hljs-number >.0</span> (v1<span class=hljs-number >.8</span><span class=hljs-number >.0</span> at /home/chriselr
+od/.cache/CPM/packageproject.cmake/<span class=hljs-number >987</span>b02f8a9fe04de3c43e0e7a1afbb29c87adc5e
+)
+-- Performing Test VEC512
+-- Performing Test VEC512 - Success
+-- Using <span class=hljs-number >2</span> batch size
+-- Configuring done (<span class=hljs-number >2.2</span>s)
+-- Generating done (<span class=hljs-number >0.0</span>s)
+-- Build files have been written to: /home/chriselrod/Documents/progwork/cx
+x/MatrixExp/buildclang
+  <span class=hljs-number >2.200352</span> seconds (<span class=hljs-number >184</span> allocations: <span class=hljs-number >205.039</span> KiB)
+[  <span class=hljs-number >0</span>%] Built target Math
+[  <span class=hljs-number >7</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_12_cxx.cxx.
+o
+[ <span class=hljs-number >35</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_9_cxx.cxx.o
+[ <span class=hljs-number >35</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_8_cxx.cxx.o
+[ <span class=hljs-number >35</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_11_cxx.cxx.
+o
+[ <span class=hljs-number >35</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_10_cxx.cxx.
+o
+[ <span class=hljs-number >42</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_7_cxx.cxx.o
+[ <span class=hljs-number >57</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_6_cxx.cxx.o
+[ <span class=hljs-number >57</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_5_cxx.cxx.o
+[ <span class=hljs-number >64</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_3_cxx.cxx.o
+[ <span class=hljs-number >78</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_2_cxx.cxx.o
+[ <span class=hljs-number >78</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_4_cxx.cxx.o
+[ <span class=hljs-number >85</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_1_cxx.cxx.o
+[ <span class=hljs-number >92</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_0_cxx.cxx.o
+[<span class=hljs-number >100</span>%] Linking CXX shared library libMatrixExp.so
+[<span class=hljs-number >100</span>%] Built target MatrixExp
+  <span class=hljs-number >4.461920</span> seconds (<span class=hljs-number >173</span> allocations: <span class=hljs-number >4.047</span> KiB)
+Process(<span class=hljs-string >`cmake --build buildclang`</span>, ProcessExited(<span class=hljs-number >0</span>))</code></pre>
+<p>This compiled all combinations we need; lets wrap them so we can call them.</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >const</span> libExpMatClang = joinpath(<span class=hljs-meta >@__DIR__</span>, <span class=hljs-string >&quot;buildclang/libMatrixExp.so&quot;</span>)
+clangexpm!(A::<span class=hljs-built_in >Matrix</span>{<span class=hljs-built_in >Float64</span>}) = <span class=hljs-meta >@ccall</span> libExpMatClang.expmf64(
+  A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>},
+  size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Clong</span>
+)::<span class=hljs-built_in >Nothing</span>
+<span class=hljs-keyword >for</span> n = <span class=hljs-number >1</span>:<span class=hljs-number >8</span>
+  sym = <span class=hljs-built_in >Symbol</span>(:expmf64d, n)
+  <span class=hljs-meta >@eval</span> clangexpm!(
+    A::<span class=hljs-built_in >Matrix</span>{ForwardDiff.Dual{T,<span class=hljs-built_in >Float64</span>,$n}}
+  ) <span class=hljs-keyword >where</span> {T} = <span class=hljs-meta >@ccall</span> libExpMatClang.$sym(
+    A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>},
+    size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Int</span>
+  )::<span class=hljs-built_in >Nothing</span>
+  <span class=hljs-keyword >for</span> i = <span class=hljs-number >1</span>:<span class=hljs-number >2</span>
+    sym = <span class=hljs-built_in >Symbol</span>(:expmf64d, n, :d, i)
+    <span class=hljs-meta >@eval</span> clangexpm!(
+      A::<span class=hljs-built_in >Matrix</span>{ForwardDiff.Dual{T1,ForwardDiff.Dual{T0,<span class=hljs-built_in >Float64</span>,$n},$i}}
+    ) <span class=hljs-keyword >where</span> {T0,T1} = <span class=hljs-meta >@ccall</span> libExpMatClang.$sym(
+      A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>},
+      size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Int</span>
+    )::<span class=hljs-built_in >Nothing</span>
+  <span class=hljs-keyword >end</span>
+<span class=hljs-keyword >end</span></code></pre>
+<p>So, now, let&#39;s set the baseline:</p>
+<pre><code class="julia hljs">testrange = range(<span class=hljs-number >0.001</span>, stop = <span class=hljs-number >6.0</span>, length=<span class=hljs-number >30_000</span>);
+rescpp = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(clangexpm!, Bs, As, testrange);
+t_clang = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(clangexpm!, Bs, As, testrange)</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >4.059012</span> seconds (<span class=hljs-number >5.98</span> M allocations: <span class=hljs-number >804.047</span> MiB, <span class=hljs-number >3.32</span>% gc time, <span class=hljs-number >2708.58</span>% compilation time)
+<span class=hljs-number >0.51463161</span></code></pre>
+<p>Great, now for our Julia implementations. While we&#39;ll also base our Julia code on this implemtantion, to start with we&#39;ll first try <code>ExponentialUtilities.jl</code> to see how it compares. <code>ExponentialUtilities.exponential&#33;</code> is likely what most people will reach for once they find that <code>Base.exp&#40;::AbstractMatrix&#41;</code> doesn&#39;t support <code>ForwardDiff.Dual</code> numbers:</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >using</span> ForwardDiff, Test
+A = rand(<span class=hljs-number >4</span>, <span class=hljs-number >4</span>)
+<span class=hljs-meta >@test_throws</span> <span class=hljs-built_in >MethodError</span> ForwardDiff.gradient(sum∘exp, A)
+<span class=hljs-keyword >using</span> ExponentialUtilities
+ForwardDiff.gradient(sum∘exponential!∘copy, A); <span class=hljs-comment ># no throw</span></code></pre>
+<p>It could be this just works great and we can go home/end the blog post early. &#61;&#41; So, let&#39;s see how it compares.</p>
+<pre><code class="julia hljs">res = <span class=hljs-meta >@time</span> do_multithreaded_work!(exponential!, Bs, As, testrange);
+t_exputils = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(exponential!, Bs, As, testrange)</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >210.769474</span> seconds (<span class=hljs-number >255.65</span> M allocations: <span class=hljs-number >219.477</span> GiB, <span class=hljs-number >7.03</span>% gc time, <span class=hljs-number >3428.05</span>% compilation time)
+<span class=hljs-number >9.691126459</span></code></pre>
+<p>Oof – compare both that compile time, and the runtime&#33;</p>
+<p>Lets confirm that our answers match.</p>
+<pre><code class="julia hljs">approxd(x, y) = isapprox(x, y)
+<span class=hljs-keyword >function</span> approxd(x::ForwardDiff.Dual, y::ForwardDiff.Dual)
+  approxd(x.value, y.value) &amp;&amp; approxd(<span class=hljs-built_in >Tuple</span>(x.partials), <span class=hljs-built_in >Tuple</span>(y.partials))
+<span class=hljs-keyword >end</span>
+approxd(x::<span class=hljs-built_in >Tuple</span>, y::<span class=hljs-built_in >Tuple</span>) = all(map(approxd, x, y))
+<span class=hljs-meta >@test</span> approxd(res, rescpp)</code></pre>
+<pre><code class="julia hljs">Test Passed</code></pre>
+<p>Great. Now, let&#39;s visualize where we stand in terms of performance.</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >using</span> CairoMakie
+<span class=hljs-keyword >function</span> cmpplot(labels, times)
+  f = Figure()
+  ax = Axis(f[<span class=hljs-number >1</span>,<span class=hljs-number >1</span>],
+    title = <span class=hljs-string >&quot;Relative Runtime&quot;</span>,
+    xticks=(eachindex(labels), labels)
+  )
+    barplot!(ax, eachindex(times), times)
+    hlines!(ax, [<span class=hljs-number >1</span>])
+  f
+<span class=hljs-keyword >end</span>
+cmpplot([<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>], [<span class=hljs-number >1.0</span>, t_exputils/t_clang])</code></pre>
+<p><img src="../figures/bench_notebook_9_1.png" alt="" /></p>
+<p>Okay, lets try a Julia implementation mirroring our C&#43;&#43; code.</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >using</span> LinearAlgebra
+<span class=hljs-comment >#My C++ `opnorm` implementation only looks at Dual&#x27;s values</span>
+<span class=hljs-comment >#so lets just go ahead and copy that optimization here.</span>
+_deval(x) = x
+_deval(x::ForwardDiff.Dual) = _deval(ForwardDiff.value(x))
+<span class=hljs-keyword >function</span> opnorm1(A)
+  n = _deval(zero(eltype(A)))
+  <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> j <span class=hljs-keyword >in</span> axes(A, <span class=hljs-number >2</span>)
+    s = _deval(zero(eltype(A)))
+    <span class=hljs-meta >@simd</span> <span class=hljs-keyword >for</span> i <span class=hljs-keyword >in</span> axes(A, <span class=hljs-number >1</span>)
+      s += abs(_deval(A[i, j]))
+    <span class=hljs-keyword >end</span>
+    n = max(n, s)
+  <span class=hljs-keyword >end</span>
+  <span class=hljs-keyword >return</span> n
+<span class=hljs-keyword >end</span>
+
+<span class=hljs-comment >#Let&#x27;s also immediately implement our own `evalpoly` to cut down</span>
+<span class=hljs-comment >#allocations. `B` contains the result, `A` is a temporary</span>
+<span class=hljs-comment >#that we reuse(following the same approach as in C++)</span>
+<span class=hljs-keyword >function</span> matevalpoly!(B, A, C, t::<span class=hljs-built_in >NTuple</span>, N)
+  <span class=hljs-meta >@assert</span> N &gt; <span class=hljs-number >1</span>
+  <span class=hljs-keyword >if</span> isodd(N)
+    A, B = B, A
+  <span class=hljs-keyword >end</span>
+  B .= t[<span class=hljs-number >1</span>] .* C
+  <span class=hljs-meta >@view</span>(B[diagind(B)]) .+= t[<span class=hljs-number >2</span>]
+  <span class=hljs-keyword >for</span> n <span class=hljs-keyword >in</span> <span class=hljs-number >3</span>:N
+    A, B = B, A
+    mul!(B, A, C)
+    <span class=hljs-meta >@view</span>(B[diagind(B)]) .+= t[n]
+  <span class=hljs-keyword >end</span>
+<span class=hljs-keyword >end</span>
+
+log2ceil(x::<span class=hljs-built_in >Float64</span>) =
+  (reinterpret(<span class=hljs-built_in >Int</span>, x) - <span class=hljs-number >1</span>) &gt;&gt; Base.significand_bits(<span class=hljs-built_in >Float64</span>) - <span class=hljs-number >1022</span>
+
+<span class=hljs-keyword >function</span> expm!(A::<span class=hljs-built_in >AbstractMatrix</span>)
+  N = size(A, <span class=hljs-number >1</span>)
+  s = <span class=hljs-number >0</span>
+  N == size(A, <span class=hljs-number >2</span>) || error(<span class=hljs-string >&quot;Matrix is not square.&quot;</span>)
+  A2 = similar(A)
+  U = similar(A)
+  <span class=hljs-keyword >if</span> (nA = opnorm1(A); nA &lt;= <span class=hljs-number >0.015</span>)
+    mul!(A2, A, A)
+    mul!(U, A, A2 + <span class=hljs-number >60.0</span>I) <span class=hljs-comment ># broadcasting doesn&#x27;t work with `I`</span>
+    A .= <span class=hljs-number >12.0</span> .* A2
+    <span class=hljs-meta >@view</span>(A[diagind(A)]) .+= <span class=hljs-number >120.0</span>
+  <span class=hljs-keyword >else</span>
+    B = similar(A)
+    <span class=hljs-keyword >if</span> nA &lt;= <span class=hljs-number >2.1</span> <span class=hljs-comment >#No need to specialize on different tuple sizes</span>
+      mul!(A2, A, A)
+      <span class=hljs-keyword >if</span> nA &gt; <span class=hljs-number >0.95</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >3960.0</span>, <span class=hljs-number >2162160.0</span>, <span class=hljs-number >302702400.0</span>, <span class=hljs-number >8821612800.0</span>)
+        p1 = (<span class=hljs-number >90.0</span>, <span class=hljs-number >110880.0</span>, <span class=hljs-number >3.027024e7</span>, <span class=hljs-number >2.0756736e9</span>, <span class=hljs-number >1.76432256e10</span>)
+        N = <span class=hljs-number >5</span>
+      <span class=hljs-keyword >elseif</span> nA &gt; <span class=hljs-number >0.25</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >1512.0</span>, <span class=hljs-number >277200.0</span>, <span class=hljs-number >8.64864e6</span>, <span class=hljs-number >0.0</span>)
+        p1 = (<span class=hljs-number >56.0</span>, <span class=hljs-number >25200.0</span>, <span class=hljs-number >1.99584e6</span>, <span class=hljs-number >1.729728e7</span>, <span class=hljs-number >0.0</span>)
+        N = <span class=hljs-number >4</span>
+      <span class=hljs-keyword >else</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >420.0</span>, <span class=hljs-number >15120.0</span>, <span class=hljs-number >0.0</span>, <span class=hljs-number >0.0</span>)
+        p1 = (<span class=hljs-number >30.0</span>, <span class=hljs-number >3360.0</span>, <span class=hljs-number >30240.0</span>, <span class=hljs-number >0.0</span>, <span class=hljs-number >0.0</span>)
+        N = <span class=hljs-number >3</span>
+      <span class=hljs-keyword >end</span>
+      matevalpoly!(B, U, A2, p0, N)
+      mul!(U, A, B)
+      matevalpoly!(A, B, A2, p1, N)
+    <span class=hljs-keyword >else</span>
+      s = nA &gt; <span class=hljs-number >5.4</span> ? log2ceil(nA / <span class=hljs-number >5.4</span>) : <span class=hljs-number >0</span>
+      <span class=hljs-keyword >if</span> isodd(s) <span class=hljs-comment ># need to swap</span>
+          A, U = U, A <span class=hljs-comment ># as we have an odd number of swaps at the end</span>
+          A .= U .* exp2(-s)
+      <span class=hljs-keyword >elseif</span> s &gt; <span class=hljs-number >0</span>
+          A .*= exp2(-s)
+      <span class=hljs-keyword >end</span>
+      mul!(A2, A, A)
+      A4 = A2 * A2
+      A6 = A2 * A4
+      <span class=hljs-comment >#we use `U` as a temporary here that we didn&#x27;t</span>
+      <span class=hljs-comment >#need in the C++ code for the estrin - style polynomial</span>
+      <span class=hljs-comment >#evaluation.Thankfully we don&#x27;t need another allocation!</span>
+      @. U = A6 + <span class=hljs-number >16380</span> * A4 + <span class=hljs-number >40840800</span> * A2
+      mul!(B, A6, U)
+      @. B += <span class=hljs-number >33522128640</span> * A6 + <span class=hljs-number >10559470521600</span> * A4 + <span class=hljs-number >1187353796428800</span> * A2
+      <span class=hljs-meta >@view</span>(B[diagind(B)]) .+= <span class=hljs-number >32382376266240000</span>
+      mul!(U, A, B)
+      <span class=hljs-comment ># `A` being filled by the answer</span>
+      <span class=hljs-comment >#we use `B` as a temporary here we didn&#x27;t</span>
+      <span class=hljs-comment >#need in the C++ code</span>
+      @. B = <span class=hljs-number >182</span> * A6 + <span class=hljs-number >960960</span> * A4 + <span class=hljs-number >1323241920</span> * A2
+      mul!(A, A6, B)
+      @. A += <span class=hljs-number >670442572800</span> * A6 + <span class=hljs-number >129060195264000</span> * A4 +
+              <span class=hljs-number >7771770303897600</span> * A2
+      <span class=hljs-meta >@view</span>(A[diagind(A)]) .+= <span class=hljs-number >64764752532480000</span>
+    <span class=hljs-keyword >end</span>
+  <span class=hljs-keyword >end</span>
+  <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> i = eachindex(A, U)
+    A[i], U[i] = A[i] + U[i], A[i] - U[i]
+  <span class=hljs-keyword >end</span>
+  ldiv!(lu!(U), A)
+  <span class=hljs-keyword >for</span> _ <span class=hljs-keyword >in</span> <span class=hljs-number >1</span>:s
+    mul!(U, A, A)
+    A, U = U, A
+  <span class=hljs-keyword >end</span>
+<span class=hljs-keyword >end</span></code></pre>
+<pre><code class="julia hljs">expm! (generic <span class=hljs-keyword >function</span> with <span class=hljs-number >1</span> method)</code></pre>
+<p>This should do roughly the same thing; does it help?</p>
+<pre><code class="julia hljs">resexpm = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(expm!, Bs, As, testrange);
+<span class=hljs-meta >@test</span> approxd(res, resexpm)
+t_expm = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm!, Bs, As, testrange)
+cmpplot(
+  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>],
+  [<span class=hljs-number >1.0</span>, t_exputils/t_clang, t_expm/t_clang]
+)</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >41.869529</span> seconds (<span class=hljs-number >107.08</span> M allocations: <span class=hljs-number >216.104</span> GiB, <span class=hljs-number >22.80</span>% gc time, <span class=hljs-number >2785.00</span>% compilation time)</code></pre>
+<p><img src="../figures/bench_notebook_11_1.png" alt="" /></p>
+<p>No, not really. One of the major issues is that <code>mul&#33;</code> is extremely slow for <code>ForwardDiff.Dual</code> numbers. <a href="https://github.com/JuliaLang/julia/pull/52038">Julia PR#52038</a> will help immensely. However, it&#39;ll only be in Julia 1.11, and we&#39;re currently still on the latest release, Julia 1.9.4. So let&#39;s implement the newer matrix multiply method here.</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >function</span> mulreduceinnerloop!(C, A, B)
+    AxM = axes(A, <span class=hljs-number >1</span>)
+    AxK = axes(A, <span class=hljs-number >2</span>) <span class=hljs-comment ># we use two `axes` calls in case of `AbstractVector`</span>
+    BxK = axes(B, <span class=hljs-number >1</span>)
+    BxN = axes(B, <span class=hljs-number >2</span>)
+    CxM = axes(C, <span class=hljs-number >1</span>)
+    CxN = axes(C, <span class=hljs-number >2</span>)
+    <span class=hljs-keyword >if</span> AxM != CxM
+        throw(<span class=hljs-built_in >DimensionMismatch</span>(<span class=hljs-string >lazy&quot;matrix A has axes (<span class=hljs-variable >$AxM</span>,<span class=hljs-variable >$AxK</span>), matrix C has axes (<span class=hljs-variable >$CxM</span>,<span class=hljs-variable >$CxN</span>)&quot;</span>))
+    <span class=hljs-keyword >end</span>
+    <span class=hljs-keyword >if</span> AxK != BxK
+        throw(<span class=hljs-built_in >DimensionMismatch</span>(<span class=hljs-string >lazy&quot;matrix A has axes (<span class=hljs-variable >$AxM</span>,<span class=hljs-variable >$AxK</span>), matrix B has axes (<span class=hljs-variable >$BxK</span>,<span class=hljs-variable >$CxN</span>)&quot;</span>))
+    <span class=hljs-keyword >end</span>
+    <span class=hljs-keyword >if</span> BxN != CxN
+      throw(<span class=hljs-built_in >DimensionMismatch</span>(<span class=hljs-string >lazy&quot;matrix B has axes (<span class=hljs-variable >$BxK</span>,<span class=hljs-variable >$BxN</span>), matrix C has axes (<span class=hljs-variable >$CxM</span>,<span class=hljs-variable >$CxN</span>)&quot;</span>))
+    <span class=hljs-keyword >end</span>
+    <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> n = BxN, m = AxM
+        Cmn = zero(eltype(C))
+        <span class=hljs-keyword >for</span> k = BxK
+            Cmn = muladd(A[m,k], B[k,n], Cmn)
+        <span class=hljs-keyword >end</span>
+      C[m,n] = Cmn
+    <span class=hljs-keyword >end</span>
+  <span class=hljs-keyword >return</span> C
+<span class=hljs-keyword >end</span>
+<span class=hljs-keyword >function</span> matevalpoly_custommul!(B, A, C, t::<span class=hljs-built_in >NTuple</span>, N)
+  <span class=hljs-meta >@assert</span> N &gt; <span class=hljs-number >1</span>
+  <span class=hljs-keyword >if</span> isodd(N)
+    A, B = B, A
+  <span class=hljs-keyword >end</span>
+  B .= t[<span class=hljs-number >1</span>] .* C
+  <span class=hljs-meta >@view</span>(B[diagind(B)]) .+= t[<span class=hljs-number >2</span>]
+  <span class=hljs-keyword >for</span> n <span class=hljs-keyword >in</span> <span class=hljs-number >3</span>:N
+    A, B = B, A
+    mulreduceinnerloop!(B, A, C)
+    <span class=hljs-meta >@view</span>(B[diagind(B)]) .+= t[n]
+  <span class=hljs-keyword >end</span>
+<span class=hljs-keyword >end</span>
+
+<span class=hljs-keyword >function</span> expm_custommul!(A::<span class=hljs-built_in >AbstractMatrix</span>)
+  N = size(A, <span class=hljs-number >1</span>)
+  s = <span class=hljs-number >0</span>
+  N == size(A, <span class=hljs-number >2</span>) || error(<span class=hljs-string >&quot;Matrix is not square.&quot;</span>)
+  A2 = similar(A)
+  U = similar(A)
+  <span class=hljs-keyword >if</span> (nA = opnorm1(A); nA &lt;= <span class=hljs-number >0.015</span>)
+    mulreduceinnerloop!(A2, A, A)
+    mulreduceinnerloop!(U, A, A2 + <span class=hljs-number >60.0</span>I)
+    <span class=hljs-comment >#broadcasting doesn&#x27;t work with `I`</span>
+    A .= <span class=hljs-number >12.0</span> .* A2
+    <span class=hljs-meta >@view</span>(A[diagind(A)]) .+= <span class=hljs-number >120.0</span>
+  <span class=hljs-keyword >else</span>
+    B = similar(A)
+    <span class=hljs-keyword >if</span> nA &lt;= <span class=hljs-number >2.1</span>
+      mulreduceinnerloop!(A2, A, A)
+      <span class=hljs-comment >#No need to specialize on different tuple sizes</span>
+      <span class=hljs-keyword >if</span> nA &gt; <span class=hljs-number >0.95</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >3960.0</span>, <span class=hljs-number >2162160.0</span>, <span class=hljs-number >302702400.0</span>, <span class=hljs-number >8821612800.0</span>)
+        p1 = (<span class=hljs-number >90.0</span>, <span class=hljs-number >110880.0</span>, <span class=hljs-number >3.027024e7</span>, <span class=hljs-number >2.0756736e9</span>, <span class=hljs-number >1.76432256e10</span>)
+        N = <span class=hljs-number >5</span>
+      <span class=hljs-keyword >elseif</span> nA &gt; <span class=hljs-number >0.25</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >1512.0</span>, <span class=hljs-number >277200.0</span>, <span class=hljs-number >8.64864e6</span>, <span class=hljs-number >0.0</span>)
+        p1 = (<span class=hljs-number >56.0</span>, <span class=hljs-number >25200.0</span>, <span class=hljs-number >1.99584e6</span>, <span class=hljs-number >1.729728e7</span>, <span class=hljs-number >0.0</span>)
+        N = <span class=hljs-number >4</span>
+      <span class=hljs-keyword >else</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >420.0</span>, <span class=hljs-number >15120.0</span>, <span class=hljs-number >0.0</span>, <span class=hljs-number >0.0</span>)
+        p1 = (<span class=hljs-number >30.0</span>, <span class=hljs-number >3360.0</span>, <span class=hljs-number >30240.0</span>, <span class=hljs-number >0.0</span>, <span class=hljs-number >0.0</span>)
+        N = <span class=hljs-number >3</span>
+      <span class=hljs-keyword >end</span>
+      matevalpoly_custommul!(B, U, A2, p0, N)
+      mulreduceinnerloop!(U, A, B)
+      matevalpoly_custommul!(A, B, A2, p1, N)
+    <span class=hljs-keyword >else</span>
+      s = nA &gt; <span class=hljs-number >5.4</span> ? log2ceil(nA / <span class=hljs-number >5.4</span>) : <span class=hljs-number >0</span>
+      <span class=hljs-keyword >if</span> isodd(s) <span class=hljs-comment ># need to swap</span>
+        A, U = U, A <span class=hljs-comment ># as we have an odd number of swaps at the end</span>
+        A .= U .* exp2(-s)
+      <span class=hljs-keyword >elseif</span> s &gt; <span class=hljs-number >0</span>
+        A .*= exp2(-s)
+      <span class=hljs-keyword >end</span>
+      mulreduceinnerloop!(A2, A, A)
+      A4 = mulreduceinnerloop!(similar(A), A2, A2)
+      A6 = mulreduceinnerloop!(similar(A), A2, A4)
+      <span class=hljs-comment >#we use `U` as a temporary here that we didn&#x27;t</span>
+      <span class=hljs-comment >#need in the C++ code for the estrin - style polynomial</span>
+      <span class=hljs-comment >#evaluation.Thankfully we don&#x27;t need another allocation!</span>
+      @. U = A6 + <span class=hljs-number >16380</span> * A4 + <span class=hljs-number >40840800</span> * A2
+      mulreduceinnerloop!(B, A6, U)
+      @. B += <span class=hljs-number >33522128640</span> * A6 + <span class=hljs-number >10559470521600</span> * A4 + <span class=hljs-number >1187353796428800</span> * A2
+      <span class=hljs-meta >@view</span>(B[diagind(B)]) .+= <span class=hljs-number >32382376266240000</span>
+      mulreduceinnerloop!(U, A, B)
+      <span class=hljs-comment >#Like in the C++ code, we swap A and U `s` times at the end</span>
+      <span class=hljs-comment >#so if `s` is odd, we pre - swap to end with the original</span>
+      <span class=hljs-comment ># `A` being filled by the answer</span>
+      <span class=hljs-comment >#we use `B` as a temporary here we didn&#x27;t</span>
+      <span class=hljs-comment >#need in the C++ code</span>
+      @. B = <span class=hljs-number >182</span> * A6 + <span class=hljs-number >960960</span> * A4 + <span class=hljs-number >1323241920</span> * A2
+      mulreduceinnerloop!(A, A6, B)
+      @. A += <span class=hljs-number >670442572800</span> * A6 + <span class=hljs-number >129060195264000</span> * A4 +
+              <span class=hljs-number >7771770303897600</span> * A2
+      <span class=hljs-meta >@view</span>(A[diagind(A)]) .+= <span class=hljs-number >64764752532480000</span>
+    <span class=hljs-keyword >end</span>
+  <span class=hljs-keyword >end</span>
+  <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> i = eachindex(A, U)
+    A[i], U[i] = A[i] + U[i], A[i] - U[i]
+  <span class=hljs-keyword >end</span>
+  ldiv!(lu!(U), A)
+  <span class=hljs-keyword >for</span> _ <span class=hljs-keyword >in</span> <span class=hljs-number >1</span>:s
+    mulreduceinnerloop!(U, A, A)
+    A, U = U, A
+  <span class=hljs-keyword >end</span>
+<span class=hljs-keyword >end</span>
+
+<span class=hljs-comment ># Testing and timing:</span>
+
+resexpmcm = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(expm_custommul!, Bs, As, testrange);
+<span class=hljs-meta >@test</span> approxd(res, resexpmcm)
+t_expm_custommul = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm_custommul!, Bs, As, testrange)
+
+cmpplot(
+  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>, <span class=hljs-string >&quot;expm_custommul!&quot;</span>],
+  [t_clang, t_exputils, t_expm, t_expm_custommul] ./ t_clang
+)</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >24.731013</span> seconds (<span class=hljs-number >65.73</span> M allocations: <span class=hljs-number >19.822</span> GiB, <span class=hljs-number >13.65</span>% gc time, <span class=hljs-number >3041.35</span>% compilation time)</code></pre>
+<p><img src="../figures/bench_notebook_12_1.png" alt="" /></p>
+<p>That does help a lot&#33; But we&#39;re still well behind.</p>
+<p>Timing shows we&#39;re spending a lot of time in GC:</p>
+<pre><code class="julia hljs"><span class=hljs-meta >@time</span> do_multithreaded_work!(expm_custommul!, Bs, As, testrange);</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >3.475502</span> seconds (<span class=hljs-number >37.40</span> M allocations: <span class=hljs-number >17.968</span> GiB, <span class=hljs-number >50.47</span>% gc time)</code></pre>
+<p>So lets try re-using the same memory through caching preallocations in the task local storage.</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >function</span> tlssimilar(A)
+  ret = get!(task_local_storage(), A) <span class=hljs-keyword >do</span>
+    ntuple(_-&gt;similar(A), <span class=hljs-built_in >Val</span>(<span class=hljs-number >5</span>))
+  <span class=hljs-keyword >end</span>
+  <span class=hljs-keyword >return</span> ret::<span class=hljs-built_in >NTuple</span>{<span class=hljs-number >5</span>,typeof(A)}
+<span class=hljs-keyword >end</span>
+
+<span class=hljs-keyword >function</span> expm_tls!(A::<span class=hljs-built_in >AbstractMatrix</span>)
+  N = size(A, <span class=hljs-number >1</span>)
+  s = <span class=hljs-number >0</span>
+  N == size(A, <span class=hljs-number >2</span>) || error(<span class=hljs-string >&quot;Matrix is not square.&quot;</span>)
+  U, B, A2, A4, A6 = tlssimilar(A)
+  <span class=hljs-keyword >if</span> (nA = opnorm1(A); nA &lt;= <span class=hljs-number >0.015</span>)
+    mulreduceinnerloop!(A2, A, A)
+    B .= A2
+    <span class=hljs-meta >@view</span>(B[diagind(B)]) .+= <span class=hljs-number >60.0</span>
+    mulreduceinnerloop!(U, A, B)
+    <span class=hljs-comment >#broadcasting doesn&#x27;t work with `I`</span>
+    A .= <span class=hljs-number >12.0</span> .* A2
+    <span class=hljs-meta >@view</span>(A[diagind(A)]) .+= <span class=hljs-number >120.0</span>
+  <span class=hljs-keyword >else</span>
+    <span class=hljs-keyword >if</span> nA &lt;= <span class=hljs-number >2.1</span>
+      mulreduceinnerloop!(A2, A, A)
+      <span class=hljs-comment >#No need to specialize on different tuple sizes</span>
+      <span class=hljs-keyword >if</span> nA &gt; <span class=hljs-number >0.95</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >3960.0</span>, <span class=hljs-number >2162160.0</span>, <span class=hljs-number >302702400.0</span>, <span class=hljs-number >8821612800.0</span>)
+        p1 = (<span class=hljs-number >90.0</span>, <span class=hljs-number >110880.0</span>, <span class=hljs-number >3.027024e7</span>, <span class=hljs-number >2.0756736e9</span>, <span class=hljs-number >1.76432256e10</span>)
+        N = <span class=hljs-number >5</span>
+      <span class=hljs-keyword >elseif</span> nA &gt; <span class=hljs-number >0.25</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >1512.0</span>, <span class=hljs-number >277200.0</span>, <span class=hljs-number >8.64864e6</span>, <span class=hljs-number >0.0</span>)
+        p1 = (<span class=hljs-number >56.0</span>, <span class=hljs-number >25200.0</span>, <span class=hljs-number >1.99584e6</span>, <span class=hljs-number >1.729728e7</span>, <span class=hljs-number >0.0</span>)
+        N = <span class=hljs-number >4</span>
+      <span class=hljs-keyword >else</span>
+        p0 = (<span class=hljs-number >1.0</span>, <span class=hljs-number >420.0</span>, <span class=hljs-number >15120.0</span>, <span class=hljs-number >0.0</span>, <span class=hljs-number >0.0</span>)
+        p1 = (<span class=hljs-number >30.0</span>, <span class=hljs-number >3360.0</span>, <span class=hljs-number >30240.0</span>, <span class=hljs-number >0.0</span>, <span class=hljs-number >0.0</span>)
+        N = <span class=hljs-number >3</span>
+      <span class=hljs-keyword >end</span>
+      matevalpoly_custommul!(B, U, A2, p0, N)
+      mulreduceinnerloop!(U, A, B)
+      matevalpoly_custommul!(A, B, A2, p1, N)
+    <span class=hljs-keyword >else</span>
+      s = nA &gt; <span class=hljs-number >5.4</span> ? log2ceil(nA / <span class=hljs-number >5.4</span>) : <span class=hljs-number >0</span>
+      <span class=hljs-keyword >if</span> isodd(s) <span class=hljs-comment ># need to swap</span>
+        A, U = U, A <span class=hljs-comment ># as we have an odd number of swaps at the end</span>
+        A .= U .* exp2(-s)
+      <span class=hljs-keyword >elseif</span> s &gt; <span class=hljs-number >0</span>
+        A .*= exp2(-s)
+      <span class=hljs-keyword >end</span>
+      mulreduceinnerloop!(A2, A, A)
+      mulreduceinnerloop!(A4, A2, A2)
+      mulreduceinnerloop!(A6, A2, A4)
+      <span class=hljs-comment >#we use `U` as a temporary here that we didn&#x27;t</span>
+      <span class=hljs-comment >#need in the C++ code for the estrin - style polynomial</span>
+      <span class=hljs-comment >#evaluation.Thankfully we don&#x27;t need another allocation!</span>
+      @. U = A6 + <span class=hljs-number >16380</span> * A4 + <span class=hljs-number >40840800</span> * A2
+      mulreduceinnerloop!(B, A6, U)
+      @. B += <span class=hljs-number >33522128640</span> * A6 + <span class=hljs-number >10559470521600</span> * A4 + <span class=hljs-number >1187353796428800</span> * A2
+      <span class=hljs-meta >@view</span>(B[diagind(B)]) .+= <span class=hljs-number >32382376266240000</span>
+      mulreduceinnerloop!(U, A, B)
+      <span class=hljs-comment >#Like in the C++ code, we swap A and U `s` times at the end</span>
+      <span class=hljs-comment >#so if `s` is odd, we pre - swap to end with the original</span>
+      <span class=hljs-comment ># `A` being filled by the answer</span>
+      <span class=hljs-comment >#we use `B` as a temporary here we didn&#x27;t</span>
+      <span class=hljs-comment >#need in the C++ code</span>
+      @. B = <span class=hljs-number >182</span> * A6 + <span class=hljs-number >960960</span> * A4 + <span class=hljs-number >1323241920</span> * A2
+      mulreduceinnerloop!(A, A6, B)
+      @. A += <span class=hljs-number >670442572800</span> * A6 + <span class=hljs-number >129060195264000</span> * A4 +
+              <span class=hljs-number >7771770303897600</span> * A2
+      <span class=hljs-meta >@view</span>(A[diagind(A)]) .+= <span class=hljs-number >64764752532480000</span>
+    <span class=hljs-keyword >end</span>
+  <span class=hljs-keyword >end</span>
+  <span class=hljs-meta >@inbounds</span> <span class=hljs-keyword >for</span> i = eachindex(A, U)
+    A[i], U[i] = A[i] + U[i], A[i] - U[i]
+  <span class=hljs-keyword >end</span>
+  ldiv!(lu!(U), A)
+  <span class=hljs-keyword >for</span> _ <span class=hljs-keyword >in</span> <span class=hljs-number >1</span>:s
+    mulreduceinnerloop!(U, A, A)
+    A, U = U, A
+  <span class=hljs-keyword >end</span>
+<span class=hljs-keyword >end</span>
+
+restls = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(expm_tls!, Bs, As, testrange)
+<span class=hljs-meta >@test</span> approxd(res, restls)
+t_tls = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm_tls!, Bs, As, testrange)
+
+cmpplot(
+  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>, <span class=hljs-string >&quot;expm_custommul!&quot;</span>, <span class=hljs-string >&quot;expm_tls!&quot;</span>],[t_clang, t_exputils, t_expm, t_expm_custommul, t_tls] ./ t_clang
+)</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >22.035270</span> seconds (<span class=hljs-number >51.75</span> M allocations: <span class=hljs-number >3.328</span> GiB, <span class=hljs-number >9.43</span>% gc time, <span class=hljs-number >3303.12</span>% compilation time)</code></pre>
+<p><img src="../figures/bench_notebook_14_1.png" alt="" /></p>
+<p>That helps a lot&#33;  Note</p>
+<pre><code class="julia hljs">(t_expm_custommul - t_tls) / t_clang</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >3.340693936386846</span></code></pre>
+<p>The total amount of GC and allocation time we saved from this approach is over 3x the total time C&#43;&#43; required for the entire calculation – including its own heap allocations and deallocations, plus the actual arithmetic.</p>
+<p>I&#39;ll stop for now. But the next two suggestions for improving the Julia code would be:</p>
+<ol>
+<li><p>Checkout a <a href="https://github.com/JuliaDiff/ForwardDiff.jl/pull/570">ForwardDiff PR</a> that uses explicit SIMD for partial accumulation.</p>
+
+<li><p>Try <a href="https://github.com/MasonProtter/Bumper.jl/">Bumper.jl</a>, which is a better approach than TLS.</p>
+
+</ol>
+<p>To build the notebook, you need Clang 17 installed on the path and Weave. Checkout <a href="https://github.com/chriselrod/MatrixExp/">MatrixExp</a>, start Julia, and run:</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >using</span> Weave
+weave(<span class=hljs-string >&quot;bench_notebook.jmd&quot;</span>, informat=<span class=hljs-string >&quot;markdown&quot;</span>, doctype=<span class=hljs-string >&quot;github&quot;</span>)</code></pre>
+<p>These results were obtained using</p>
+<pre><code class="julia hljs">julia&gt; versioninfo()
+Julia Version <span class=hljs-number >1.9</span><span class=hljs-number >.4</span>
+Commit <span class=hljs-number >8e5136</span>fa29 (<span class=hljs-number >2023</span>-<span class=hljs-number >11</span>-<span class=hljs-number >14</span> <span class=hljs-number >08</span>:<span class=hljs-number >46</span> UTC)
+Build Info:
+
+    Note: This is an unofficial build, please report bugs to the project
+    responsible <span class=hljs-keyword >for</span> this build and not to the Julia project unless you can
+    reproduce the issue <span class=hljs-keyword >using</span> official builds available at https://julialang.org/downloads
+
+Platform Info:
+  OS: Linux (x86_64-generic-linux)
+  CPU: <span class=hljs-number >36</span> × Intel(R) Core(TM) i9-<span class=hljs-number >10980</span>XE CPU @ <span class=hljs-number >3.00</span>GHz
+  WORD_SIZE: <span class=hljs-number >64</span>
+  LIBM: libopenlibm
+  LLVM: libLLVM-<span class=hljs-number >14.0</span><span class=hljs-number >.6</span> (ORCJIT, cascadelake)
+  Threads: <span class=hljs-number >36</span> on <span class=hljs-number >36</span> virtual cores</code></pre>
+<p>Using 36 threads exagerates scaling differences compared to systems with fewer threads.</p>
+<div class=page-foot >
+  <div class="copyright bt b--moon-gray mt4 pt2">
+      <small class=silver >
+    &copy; Chris Elrod, Yingbo Ma. Last modified: November 26, 2023. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>.
+      </small>
+  </div>
+</div>
+</div>
+    </div>
