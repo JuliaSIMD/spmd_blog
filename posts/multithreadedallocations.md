@@ -316,7 +316,7 @@ end
 cmpplot(["Clang", "ExponentialUtilities.jl"], [1.0, t_exputils/t_clang])
 ```
 
-![](../figures/bench_notebook_9_1.png)
+![](/figures/bench_notebook_9_1.png)
 
 
 Okay, lets try a Julia implementation mirroring our C++ code.
@@ -452,7 +452,7 @@ cmpplot(
 ```
 
 
-![](../figures/bench_notebook_11_1.png)
+![](/figures/bench_notebook_11_1.png)
 
 
 No, not really.
@@ -590,7 +590,7 @@ cmpplot(
 ```
 
 
-![](../figures/bench_notebook_12_1.png)
+![](/figures/bench_notebook_12_1.png)
 
 
 That does help a lot! But we're still well behind.
@@ -704,7 +704,7 @@ cmpplot(
 ```
 
 
-![](../figures/bench_notebook_14_1.png)
+![](/figures/bench_notebook_14_1.png)
 
 
 That helps a lot! 
