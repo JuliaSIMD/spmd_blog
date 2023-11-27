@@ -226,7 +226,7 @@ approxd(x::<span class=hljs-built_in >Tuple</span>, y::<span class=hljs-built_in
   f
 <span class=hljs-keyword >end</span>
 cmpplot([<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>], [<span class=hljs-number >1.0</span>, t_exputils/t_clang])</code></pre>
-<p><img src="../figures/bench_notebook_9_1.png" alt="" /></p>
+<p><img src="/figures/bench_notebook_9_1.png" alt="" /></p>
 <p>Okay, lets try a Julia implementation mirroring our C&#43;&#43; code.</p>
 <pre><code class="julia hljs"><span class=hljs-keyword >using</span> LinearAlgebra
 <span class=hljs-comment >#My C++ `opnorm` implementation only looks at Dual&#x27;s values</span>
@@ -344,7 +344,7 @@ cmpplot(
   [<span class=hljs-number >1.0</span>, t_exputils/t_clang, t_expm/t_clang]
 )</code></pre>
 <pre><code class="julia hljs"><span class=hljs-number >41.869529</span> seconds (<span class=hljs-number >107.08</span> M allocations: <span class=hljs-number >216.104</span> GiB, <span class=hljs-number >22.80</span>% gc time, <span class=hljs-number >2785.00</span>% compilation time)</code></pre>
-<p><img src="../figures/bench_notebook_11_1.png" alt="" /></p>
+<p><img src="/figures/bench_notebook_11_1.png" alt="" /></p>
 <p>No, not really. One of the major issues is that <code>mul&#33;</code> is extremely slow for <code>ForwardDiff.Dual</code> numbers. <a href="https://github.com/JuliaLang/julia/pull/52038">Julia PR#52038</a> will help immensely. However, it&#39;ll only be in Julia 1.11, and we&#39;re currently still on the latest release, Julia 1.9.4. So let&#39;s implement the newer matrix multiply method here.</p>
 <pre><code class="julia hljs"><span class=hljs-keyword >function</span> mulreduceinnerloop!(C, A, B)
     AxM = axes(A, <span class=hljs-number >1</span>)
@@ -470,7 +470,7 @@ cmpplot(
   [t_clang, t_exputils, t_expm, t_expm_custommul] ./ t_clang
 )</code></pre>
 <pre><code class="julia hljs"><span class=hljs-number >24.731013</span> seconds (<span class=hljs-number >65.73</span> M allocations: <span class=hljs-number >19.822</span> GiB, <span class=hljs-number >13.65</span>% gc time, <span class=hljs-number >3041.35</span>% compilation time)</code></pre>
-<p><img src="../figures/bench_notebook_12_1.png" alt="" /></p>
+<p><img src="/figures/bench_notebook_12_1.png" alt="" /></p>
 <p>That does help a lot&#33; But we&#39;re still well behind.</p>
 <p>Timing shows we&#39;re spending a lot of time in GC:</p>
 <pre><code class="julia hljs"><span class=hljs-meta >@time</span> do_multithreaded_work!(expm_custommul!, Bs, As, testrange);</code></pre>
@@ -565,7 +565,7 @@ cmpplot(
   [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>, <span class=hljs-string >&quot;expm_custommul!&quot;</span>, <span class=hljs-string >&quot;expm_tls!&quot;</span>],[t_clang, t_exputils, t_expm, t_expm_custommul, t_tls] ./ t_clang
 )</code></pre>
 <pre><code class="julia hljs"><span class=hljs-number >22.035270</span> seconds (<span class=hljs-number >51.75</span> M allocations: <span class=hljs-number >3.328</span> GiB, <span class=hljs-number >9.43</span>% gc time, <span class=hljs-number >3303.12</span>% compilation time)</code></pre>
-<p><img src="../figures/bench_notebook_14_1.png" alt="" /></p>
+<p><img src="/figures/bench_notebook_14_1.png" alt="" /></p>
 <p>That helps a lot&#33;  Note</p>
 <pre><code class="julia hljs">(t_expm_custommul - t_tls) / t_clang</code></pre>
 <pre><code class="julia hljs"><span class=hljs-number >3.340693936386846</span></code></pre>
@@ -601,7 +601,7 @@ Platform Info:
 <div class=page-foot >
   <div class="copyright bt b--moon-gray mt4 pt2">
       <small class=silver >
-    &copy; Chris Elrod, Yingbo Ma. Last modified: November 26, 2023. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>.
+    &copy; Chris Elrod, Yingbo Ma. Last modified: November 27, 2023. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>.
       </small>
   </div>
 </div>
