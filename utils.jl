@@ -27,12 +27,15 @@ function hfun_blogposts()
     post_data = map(posts) do post
         ps  = splitext(post)[1]
         url = "/posts/$ps/"
-        surl = strip(url, '/')
-        title = pagevar(surl, :title)
-        pubdate = pagevar(surl, :date)
-        pubdate, title, url
+        surl = string(strip(url, '/'))::String
+        title = string(pagevar(surl, :title))::String
+        d = pagevar(surl, :date)
+        if d isa Date
+           return d, title, url
+        else
+           throw("Date not found for: $surl\nfound pubdate = $d")
+        end
     end
-
     sort!(post_data, by=first, rev=true)
 
     prev_yr = nothing
