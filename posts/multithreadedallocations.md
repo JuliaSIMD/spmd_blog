@@ -353,7 +353,7 @@ end
 cmpplot(["Clang", "GCC", "ExponentialUtilities.jl"], [1.0, t_gcc/t_clang, t_exputils/t_clang])
 ```
 
-![](figures/bench_notebook_10_1.png)
+![](/figures/bench_notebook_10_1.png)
 
 
 Okay, lets try a Julia implementation mirroring our C++ code.
@@ -491,7 +491,7 @@ t_expm = 19.625654611
 ```
 
 
-![](figures/bench_notebook_12_1.png)
+![](/figures/bench_notebook_12_1.png)
 
 
 No, not really.
@@ -631,7 +631,7 @@ t_expm_custommul = 7.412792419
 ```
 
 
-![](figures/bench_notebook_13_1.png)
+![](/figures/bench_notebook_13_1.png)
 
 
 That does help a lot! But we're still well behind.
@@ -749,7 +749,7 @@ t_tls = 3.643992699
 ```
 
 
-![](figures/bench_notebook_15_1.png)
+![](/figures/bench_notebook_15_1.png)
 
 
 That helps a lot! 
