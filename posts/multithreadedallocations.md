@@ -490,7 +490,6 @@ cmpplot(
 t_expm = 19.625654611
 ```
 
-
 ![](/figures/bench_notebook_12_1.png)
 
 
@@ -630,7 +629,6 @@ cmpplot(
 t_expm_custommul = 7.412792419
 ```
 
-
 ![](/figures/bench_notebook_13_1.png)
 
 
@@ -747,7 +745,6 @@ cmpplot(
  compilation time)
 t_tls = 3.643992699
 ```
-
 
 ![](/figures/bench_notebook_15_1.png)
 
