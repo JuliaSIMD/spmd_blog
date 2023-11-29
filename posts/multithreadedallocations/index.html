@@ -1,4 +1,4 @@
-<!doctype html> <html lang=en > <meta charset=UTF-8 > <meta name=viewport  content="width=device-width, initial-scale=1"> <link rel=stylesheet  href="/libs/highlight/github.min.css"> <link rel=stylesheet  href="/css/tachyons.css"> <link rel=icon  href="/assets/favicon.png"> <link rel=preconnect  href="https://fonts.gstatic.com"> <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel=stylesheet > <title>Competing with C++ with Julia in multithreaded, allocating code</title> <style> body { font-size: 16px; background: #111111; line-height: 1.8; font-family: "PT Serif", sans-serif; margin: 0 auto 0 auto; color: #EEEEEE; } a { color: silver; border-bottom: 3px solid #e1e1e1; text-decoration: none; transition: opacity .15s ease-in; } a:hover,a:focus { color: #F4F4F4; border-bottom: 3px solid #c1c1c1; transition: opacity .15s ease-in; } .colbox-blue { background-color: #eef3f5; padding-top: 5px; padding-right: 10px; padding-left: 10px; padding-bottom: 5px; margin-left: 5px; margin-top: 5px; margin-bottom: 5px; border-radius: 0 10px 10px 0; border-left: 5px solid #4c9cf1; } blockquote { background: var(--block-background); border-left: 7px solid #a8a8a8; margin: 1.5em 10px; padding: 0.5em 10px; font-style: italic; } blockquote p { display: inline; } .hljs { font-family: "Fira Code", monospace; font-size: 14px; line-height: 1.35em; border-radius: 2px; } </style> <div class="pa5 pt4 pb4" style="margin: 0 auto; max-width: 900px; background: #333333"> <header> <div class="f2 lh-copy b"><a href="/" class="bn dim normal silver">Loop Compiler</a></div> <nav> <ul class="flex list pl0 bt bb b--light-silver mb4"> <li class="pa2 pl0"><a class="bn dim" href="/">Home</a> </ul> </nav> </header> <h1 class="f2 lh-title normal light-gray">Competing with C++ with Julia in multithreaded, allocating code</h1> <div class="f5 lh-copy i gray">2023-11-26</div> <div class=franklin-content > <h1 id=benchmarking_test_case ><a href="#benchmarking_test_case" class=header-anchor >Benchmarking test case</a></h1> <p>Our benchmark test case will be applying ForwardMode AD with dual numbers with dynamically sized square matrices of size 2x2...8x8 on multiple threads. We&#39;ll test no duals, and dual sizes <code>1:8</code> for single derivatives, and <code>1:8</code> by <code>1:2</code> for second derivatives. This gives us a large number of combinations, which increases the working memory we need a bit. We&#39;ll iterate over a range of scale factors, to hit different code-paths based on the op-norm of the matrices. For each scale factor, we&#39;ll iterate over all tested matrices to increase the working set of memory, to simulate more realistic workloads that may &#40;for example&#41; be solving a large number of affine differential equations as part of an optimization problem. For Julia, we&#39;ll be using <code>ForwardDiff.jl</code>, and for C&#43;&#43; we use an implementation from the LoopModels supporting math library.</p> <p>The function we&#39;re benchmarking:</p> <pre><code class="julia hljs"><span class=hljs-keyword >using</span> Base.Threads
+<!doctype html> <html lang=en > <meta charset=UTF-8 > <meta name=viewport  content="width=device-width, initial-scale=1"> <link rel=stylesheet  href="/libs/highlight/github.min.css"> <link rel=stylesheet  href="/css/tachyons.css"> <link rel=icon  href="/assets/favicon.png"> <link rel=preconnect  href="https://fonts.gstatic.com"> <link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel=stylesheet > <title>Competing with C++ with Julia in multithreaded, allocating code</title> <style> body { font-size: 16px; background: #111111; line-height: 1.8; font-family: "PT Serif", sans-serif; margin: 0 auto 0 auto; color: #EEEEEE; } a { color: silver; border-bottom: 3px solid #e1e1e1; text-decoration: none; transition: opacity .15s ease-in; } a:hover,a:focus { color: #F4F4F4; border-bottom: 3px solid #c1c1c1; transition: opacity .15s ease-in; } .colbox-blue { background-color: #eef3f5; padding-top: 5px; padding-right: 10px; padding-left: 10px; padding-bottom: 5px; margin-left: 5px; margin-top: 5px; margin-bottom: 5px; border-radius: 0 10px 10px 0; border-left: 5px solid #4c9cf1; } blockquote { background: var(--block-background); border-left: 7px solid #a8a8a8; margin: 1.5em 10px; padding: 0.5em 10px; font-style: italic; } blockquote p { display: inline; } .hljs { font-family: "Fira Code", monospace; font-size: 14px; line-height: 1.35em; border-radius: 2px; } </style> <div class="pa5 pt4 pb4" style="margin: 0 auto; max-width: 900px; background: #333333"> <header> <div class="f2 lh-copy b"><a href="/" class="bn dim normal silver">Loop Compiler</a></div> <nav> <ul class="flex list pl0 bt bb b--light-silver mb4"> <li class="pa2 pl0"><a class="bn dim" href="/">Home</a> </ul> </nav> </header> <h1 class="f2 lh-title normal light-gray">Competing with C++ with Julia in multithreaded, allocating code</h1> <div class="f5 lh-copy i gray">2023-11-29</div> <div class=franklin-content > <h1 id=benchmarking_test_case ><a href="#benchmarking_test_case" class=header-anchor >Benchmarking test case</a></h1> <p>Our benchmark test case will be applying ForwardMode AD with dual numbers with dynamically sized square matrices of size 2x2...8x8 on multiple threads. We&#39;ll test no duals, and dual sizes <code>1:8</code> for single derivatives, and <code>1:8</code> by <code>1:2</code> for second derivatives. This gives us a large number of combinations, which increases the working memory we need a bit. We&#39;ll iterate over a range of scale factors, to hit different code-paths based on the op-norm of the matrices. For each scale factor, we&#39;ll iterate over all tested matrices to increase the working set of memory, to simulate more realistic workloads that may &#40;for example&#41; be solving a large number of affine differential equations as part of an optimization problem. For Julia, we&#39;ll be using <code>ForwardDiff.jl</code>, and for C&#43;&#43; we use an implementation from the LoopModels supporting math library.</p> <p>The function we&#39;re benchmarking:</p> <pre><code class="julia hljs"><span class=hljs-keyword >using</span> Base.Threads
 
 <span class=hljs-comment ># utilities for dealing with nested tuples</span>
 <span class=hljs-comment ># we use nested instead of flat tuples to avoid heuristics</span>
@@ -53,13 +53,13 @@ rmaptnum(f::F, x::<span class=hljs-built_in >Tuple</span>{<span class=hljs-built
 <span class=hljs-keyword >end</span></code></pre> <pre><code class="julia hljs">do_multithreaded_work! (generic <span class=hljs-keyword >function</span> with <span class=hljs-number >1</span> method)</code></pre>
 <p>We need some boiler plate to deal with large numbers of different types in stable manner by iterating over tuples. The code calculates a matrix exponential after scaling an input, and accumulates a sum of the results. Lets create some test case matrices:</p>
 <pre><code class="julia hljs"><span class=hljs-keyword >using</span> ForwardDiff
-max_size = <span class=hljs-number >5</span>;
 d(x, n) = ForwardDiff.Dual(x, ntuple(_-&gt;randn(), n))
 <span class=hljs-keyword >function</span> dualify(A, n, j)
   n == <span class=hljs-number >0</span> &amp;&amp; <span class=hljs-keyword >return</span> A
   j == <span class=hljs-number >0</span> ? d.(A, n) : d.(d.(A, n), j)
 <span class=hljs-keyword >end</span>
 randdual(n, dinner, douter) = dualify(rand(n,n), dinner, douter)
+max_size = <span class=hljs-number >5</span>;
 As = map((<span class=hljs-number >0</span>,<span class=hljs-number >1</span>,<span class=hljs-number >2</span>)) <span class=hljs-keyword >do</span> dout <span class=hljs-comment ># outer dual</span>
   map(ntuple(identity,<span class=hljs-built_in >Val</span>(<span class=hljs-number >9</span>)).-<span class=hljs-number >1</span>) <span class=hljs-keyword >do</span> din <span class=hljs-comment ># inner dual</span>
     map(ntuple(identity,<span class=hljs-built_in >Val</span>(max_size-<span class=hljs-number >1</span>)).+<span class=hljs-number >1</span>) <span class=hljs-keyword >do</span> n <span class=hljs-comment ># matrix size</span>
@@ -120,79 +120,104 @@ Bs = rmap(similar, As);</code></pre>
   <span class=hljs-keyword >for</span> (; s--; std::<span class=hljs-built_in >swap</span>(A, U)) U &lt;&lt; A * A;
 }</code></pre>
 <p>Now, to compile it</p>
-<pre><code class="julia hljs">withenv(<span class=hljs-string >&quot;CXX&quot;</span>=&gt;<span class=hljs-string >&quot;clang++&quot;</span>) <span class=hljs-keyword >do</span> <span class=hljs-comment ># clang++ is much faster than g++ here</span>
+<pre><code class="julia hljs">withenv(<span class=hljs-string >&quot;CXX&quot;</span>=&gt;<span class=hljs-string >&quot;clang++&quot;</span>) <span class=hljs-keyword >do</span> 
   <span class=hljs-meta >@time</span> run(<span class=hljs-string >`cmake -S . -B buildclang -DCMAKE_BUILD_TYPE=Release -DCMAKE_UNITY_BUILD=ON`</span>)
-  <span class=hljs-meta >@time</span> run(<span class=hljs-string >`cmake --build buildclang`</span>)
-<span class=hljs-keyword >end</span></code></pre>
-<pre><code class="julia hljs">-- The CXX compiler identification is Clang <span class=hljs-number >17.0</span><span class=hljs-number >.5</span>
--- Detecting CXX compiler ABI info
--- Detecting CXX compiler ABI info - done
--- Check <span class=hljs-keyword >for</span> working CXX compiler: /bin/clang++ - skipped
--- Detecting CXX compile features
--- Detecting CXX compile features - done
--- Found Git: /bin/git (found version <span class=hljs-string >&quot;2.43.0&quot;</span>) 
--- CPM: Adding package PackageProject.cmake@<span class=hljs-number >1.8</span><span class=hljs-number >.0</span> (v1<span class=hljs-number >.8</span><span class=hljs-number >.0</span> at /home/chriselr
-od/.cache/CPM/packageproject.cmake/<span class=hljs-number >987</span>b02f8a9fe04de3c43e0e7a1afbb29c87adc5e
+<span class=hljs-keyword >end</span>
+withenv(<span class=hljs-string >&quot;CXX&quot;</span>=&gt;<span class=hljs-string >&quot;g++&quot;</span>) <span class=hljs-keyword >do</span> 
+  <span class=hljs-meta >@time</span> run(<span class=hljs-string >`cmake -S . -B buildgcc -DCMAKE_BUILD_TYPE=Release -DCMAKE_UNITY_BUILD=ON`</span>)
+<span class=hljs-keyword >end</span>
+<span class=hljs-meta >@time</span> run(<span class=hljs-string >`cmake --build buildclang`</span>);
+<span class=hljs-meta >@time</span> run(<span class=hljs-string >`cmake --build buildgcc`</span>);</code></pre>
+<pre><code class="sh hljs">-- CPM: Adding package PackageProject.cmake@1.8.0 (v1.8.0 at /home/chriselr
+<span class=hljs-built_in >od</span>/.cache/CPM/packageproject.cmake/987b02f8a9fe04de3c43e0e7a1afbb29c87adc5e
 )
--- Performing Test VEC512
--- Performing Test VEC512 - Success
--- Using <span class=hljs-number >2</span> batch size
--- Configuring done (<span class=hljs-number >2.2</span>s)
--- Generating done (<span class=hljs-number >0.0</span>s)
+-- Using 2 batch size
+-- Configuring <span class=hljs-keyword >done</span> (1.0s)
+-- Generating <span class=hljs-keyword >done</span> (0.0s)
 -- Build files have been written to: /home/chriselrod/Documents/progwork/cx
 x/MatrixExp/buildclang
-  <span class=hljs-number >2.200352</span> seconds (<span class=hljs-number >184</span> allocations: <span class=hljs-number >205.039</span> KiB)
-[  <span class=hljs-number >0</span>%] Built target Math
-[  <span class=hljs-number >7</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_12_cxx.cxx.
+  1.078926 seconds (103 allocations: 203.492 KiB)
+-- CPM: Adding package PackageProject.cmake@1.8.0 (v1.8.0 at /home/chriselr
+<span class=hljs-built_in >od</span>/.cache/CPM/packageproject.cmake/987b02f8a9fe04de3c43e0e7a1afbb29c87adc5e
+)
+-- Using 2 batch size
+-- Configuring <span class=hljs-keyword >done</span> (0.9s)
+-- Generating <span class=hljs-keyword >done</span> (0.0s)
+-- Build files have been written to: /home/chriselrod/Documents/progwork/cx
+x/MatrixExp/buildgcc
+  0.929433 seconds (100 allocations: 2.945 KiB)
+[  0%] Built target Math
+[  7%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_12_cxx.cxx.
 o
-[ <span class=hljs-number >35</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_9_cxx.cxx.o
-[ <span class=hljs-number >35</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_8_cxx.cxx.o
-[ <span class=hljs-number >35</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_11_cxx.cxx.
+[ 14%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_11_cxx.cxx.
 o
-[ <span class=hljs-number >35</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_10_cxx.cxx.
+[ 21%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_10_cxx.cxx.
 o
-[ <span class=hljs-number >42</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_7_cxx.cxx.o
-[ <span class=hljs-number >57</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_6_cxx.cxx.o
-[ <span class=hljs-number >57</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_5_cxx.cxx.o
-[ <span class=hljs-number >64</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_3_cxx.cxx.o
-[ <span class=hljs-number >78</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_2_cxx.cxx.o
-[ <span class=hljs-number >78</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_4_cxx.cxx.o
-[ <span class=hljs-number >85</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_1_cxx.cxx.o
-[ <span class=hljs-number >92</span>%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_0_cxx.cxx.o
-[<span class=hljs-number >100</span>%] Linking CXX shared library libMatrixExp.so
-[<span class=hljs-number >100</span>%] Built target MatrixExp
-  <span class=hljs-number >4.461920</span> seconds (<span class=hljs-number >173</span> allocations: <span class=hljs-number >4.047</span> KiB)
-Process(<span class=hljs-string >`cmake --build buildclang`</span>, ProcessExited(<span class=hljs-number >0</span>))</code></pre>
+[ 28%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_9_cxx.cxx.o
+[ 35%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_8_cxx.cxx.o
+[ 42%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_7_cxx.cxx.o
+[ 50%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_6_cxx.cxx.o
+[ 57%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_5_cxx.cxx.o
+[ 64%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_4_cxx.cxx.o
+[ 71%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_3_cxx.cxx.o
+[ 78%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_2_cxx.cxx.o
+[ 85%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_1_cxx.cxx.o
+[ 92%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_0_cxx.cxx.o
+[100%] Linking CXX shared library libMatrixExp.so
+[100%] Built target MatrixExp
+  5.193901 seconds (191 allocations: 4.391 KiB)
+[  0%] Built target Math
+[  7%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_12_cxx.cxx.
+o
+[ 14%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_11_cxx.cxx.
+o
+[ 21%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_10_cxx.cxx.
+o
+[ 28%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_9_cxx.cxx.o
+[ 35%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_8_cxx.cxx.o
+[ 42%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_7_cxx.cxx.o
+[ 50%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_6_cxx.cxx.o
+[ 57%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_5_cxx.cxx.o
+[ 64%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_4_cxx.cxx.o
+[ 71%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_3_cxx.cxx.o
+[ 78%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_2_cxx.cxx.o
+[ 85%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_1_cxx.cxx.o
+[ 92%] Building CXX object CMakeFiles/MatrixExp.<span class=hljs-built_in >dir</span>/Unity/unity_0_cxx.cxx.o
+[100%] Linking CXX shared library libMatrixExp.so
+[100%] Built target MatrixExp
+  4.866813 seconds (182 allocations: 4.219 KiB)</code></pre>
 <p>This compiled all combinations we need; lets wrap them so we can call them.</p>
-<pre><code class="julia hljs"><span class=hljs-keyword >const</span> libExpMatClang = joinpath(<span class=hljs-meta >@__DIR__</span>, <span class=hljs-string >&quot;buildclang/libMatrixExp.so&quot;</span>)
-clangexpm!(A::<span class=hljs-built_in >Matrix</span>{<span class=hljs-built_in >Float64</span>}) = <span class=hljs-meta >@ccall</span> libExpMatClang.expmf64(
-  A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>},
-  size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Clong</span>
-)::<span class=hljs-built_in >Nothing</span>
-<span class=hljs-keyword >for</span> n = <span class=hljs-number >1</span>:<span class=hljs-number >8</span>
-  sym = <span class=hljs-built_in >Symbol</span>(:expmf64d, n)
-  <span class=hljs-meta >@eval</span> clangexpm!(
-    A::<span class=hljs-built_in >Matrix</span>{ForwardDiff.Dual{T,<span class=hljs-built_in >Float64</span>,$n}}
-  ) <span class=hljs-keyword >where</span> {T} = <span class=hljs-meta >@ccall</span> libExpMatClang.$sym(
-    A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>},
-    size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Int</span>
-  )::<span class=hljs-built_in >Nothing</span>
-  <span class=hljs-keyword >for</span> i = <span class=hljs-number >1</span>:<span class=hljs-number >2</span>
-    sym = <span class=hljs-built_in >Symbol</span>(:expmf64d, n, :d, i)
-    <span class=hljs-meta >@eval</span> clangexpm!(
-      A::<span class=hljs-built_in >Matrix</span>{ForwardDiff.Dual{T1,ForwardDiff.Dual{T0,<span class=hljs-built_in >Float64</span>,$n},$i}}
-    ) <span class=hljs-keyword >where</span> {T0,T1} = <span class=hljs-meta >@ccall</span> libExpMatClang.$sym(
-      A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>},
-      size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Int</span>
-    )::<span class=hljs-built_in >Nothing</span>
+<pre><code class="julia hljs"><span class=hljs-keyword >const</span> libExpMatGCC = joinpath(<span class=hljs-meta >@__DIR__</span>, <span class=hljs-string >&quot;buildgcc/libMatrixExp.so&quot;</span>)
+<span class=hljs-keyword >const</span> libExpMatClang = joinpath(<span class=hljs-meta >@__DIR__</span>, <span class=hljs-string >&quot;buildclang/libMatrixExp.so&quot;</span>)
+<span class=hljs-keyword >for</span> (lib, cc) <span class=hljs-keyword >in</span> ((:libExpMatGCC, :gcc), (:libExpMatClang, :clang))
+  j = <span class=hljs-built_in >Symbol</span>(cc, :expm!)
+
+  <span class=hljs-meta >@eval</span> $j(A::<span class=hljs-built_in >Matrix</span>{<span class=hljs-built_in >Float64</span>}) =
+    <span class=hljs-meta >@ccall</span> $lib.expmf64(A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>}, size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Clong</span>)::<span class=hljs-built_in >Nothing</span>
+  <span class=hljs-keyword >for</span> n = <span class=hljs-number >1</span>:<span class=hljs-number >8</span>
+    sym = <span class=hljs-built_in >Symbol</span>(:expmf64d, n)
+    <span class=hljs-meta >@eval</span> $j(A::<span class=hljs-built_in >Matrix</span>{ForwardDiff.Dual{T,<span class=hljs-built_in >Float64</span>,$n}}) <span class=hljs-keyword >where</span> {T} =
+      <span class=hljs-meta >@ccall</span> $lib.$sym(A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>}, size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Clong</span>)::<span class=hljs-built_in >Nothing</span>
+    <span class=hljs-keyword >for</span> i = <span class=hljs-number >1</span>:<span class=hljs-number >2</span>
+      sym = <span class=hljs-built_in >Symbol</span>(:expmf64d, n, :d, i)
+      <span class=hljs-meta >@eval</span> $j(
+        A::<span class=hljs-built_in >Matrix</span>{ForwardDiff.Dual{T1,ForwardDiff.Dual{T0,<span class=hljs-built_in >Float64</span>,$n},$i}}
+      ) <span class=hljs-keyword >where</span> {T0,T1} =
+        <span class=hljs-meta >@ccall</span> $lib.$sym(A::<span class=hljs-built_in >Ptr</span>{<span class=hljs-built_in >Float64</span>}, size(A, <span class=hljs-number >1</span>)::<span class=hljs-built_in >Clong</span>)::<span class=hljs-built_in >Nothing</span>
+    <span class=hljs-keyword >end</span>
   <span class=hljs-keyword >end</span>
 <span class=hljs-keyword >end</span></code></pre>
-<p>So, now, let&#39;s set the baseline:</p>
-<pre><code class="julia hljs">testrange = range(<span class=hljs-number >0.001</span>, stop = <span class=hljs-number >6.0</span>, length=<span class=hljs-number >30_000</span>);
-rescpp = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(clangexpm!, Bs, As, testrange);
-t_clang = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(clangexpm!, Bs, As, testrange)</code></pre>
-<pre><code class="julia hljs"><span class=hljs-number >4.059012</span> seconds (<span class=hljs-number >5.98</span> M allocations: <span class=hljs-number >804.047</span> MiB, <span class=hljs-number >3.32</span>% gc time, <span class=hljs-number >2708.58</span>% compilation time)
-<span class=hljs-number >0.51463161</span></code></pre>
+<p>So, now, let&#39;s set clang as baseline &#40;as it uses LLVM, like Julia&#41;:</p>
+<pre><code class="julia hljs">testrange = range(<span class=hljs-number >0.001</span>, stop = <span class=hljs-number >6.0</span>, length=<span class=hljs-number >1</span>&lt;&lt;<span class=hljs-number >16</span>);
+resclang = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(clangexpm!, Bs, As, testrange);
+GC.gc(); t_clang = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(clangexpm!, Bs, As, testrange);
+resgcc = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(gccexpm!, Bs, As, testrange);
+GC.gc(); t_gcc = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(gccexpm!, Bs, As, testrange);
+<span class=hljs-meta >@show</span> t_clang t_gcc;</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >4.672876</span> seconds (<span class=hljs-number >6.21</span> M allocations: <span class=hljs-number >1.280</span> GiB, <span class=hljs-number >2.34</span>% gc time, <span class=hljs-number >2418.26</span>% compilation time)
+  <span class=hljs-number >2.013181</span> seconds (<span class=hljs-number >826.92</span> k allocations: <span class=hljs-number >967.335</span> MiB, <span class=hljs-number >1.93</span>% gc time, <span class=hljs-number >1181.39</span>% compilation time)
+t_clang = <span class=hljs-number >1.07510643</span>
+t_gcc = <span class=hljs-number >1.214891182</span></code></pre>
 <p>Great, now for our Julia implementations. While we&#39;ll also base our Julia code on this implemtantion, to start with we&#39;ll first try <code>ExponentialUtilities.jl</code> to see how it compares. <code>ExponentialUtilities.exponential&#33;</code> is likely what most people will reach for once they find that <code>Base.exp&#40;::AbstractMatrix&#41;</code> doesn&#39;t support <code>ForwardDiff.Dual</code> numbers:</p>
 <pre><code class="julia hljs"><span class=hljs-keyword >using</span> ForwardDiff, Test
 A = rand(<span class=hljs-number >4</span>, <span class=hljs-number >4</span>)
@@ -201,17 +226,20 @@ A = rand(<span class=hljs-number >4</span>, <span class=hljs-number >4</span>)
 ForwardDiff.gradient(sum∘exponential!∘copy, A); <span class=hljs-comment ># no throw</span></code></pre>
 <p>It could be this just works great and we can go home/end the blog post early. &#61;&#41; So, let&#39;s see how it compares.</p>
 <pre><code class="julia hljs">res = <span class=hljs-meta >@time</span> do_multithreaded_work!(exponential!, Bs, As, testrange);
-t_exputils = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(exponential!, Bs, As, testrange)</code></pre>
-<pre><code class="julia hljs"><span class=hljs-number >210.769474</span> seconds (<span class=hljs-number >255.65</span> M allocations: <span class=hljs-number >219.477</span> GiB, <span class=hljs-number >7.03</span>% gc time, <span class=hljs-number >3428.05</span>% compilation time)
-<span class=hljs-number >9.691126459</span></code></pre>
-<p>Oof – compare both that compile time, and the runtime&#33;</p>
+GC.gc(); t_exputils = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(exponential!, Bs, As, testrange);
+<span class=hljs-meta >@show</span> t_exputils;</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >224.519678</span> seconds (<span class=hljs-number >319.87</span> M allocations: <span class=hljs-number >462.541</span> GiB, <span class=hljs-number >9.83</span>% gc time, <span class=hljs-number >3258.87</span>% compilation time)
+t_exputils = <span class=hljs-number >19.837025301</span></code></pre>
+<p>Oof – compare both that compile time, and the runtime&#33; Future Julia compile times are going to be a bit better thanks to being able to reuse some of the code that was compiled above. We especially have a lot of code in common among our subsequent function calls. Lets also ignore the fact that we are not using features such as precompiled headers in C&#43;&#43;, while provides the equivalent of pre-parsing modules like <code>ForwardDiff.jl</code>, <code>ExponentialUtilities.jl</code>, or the <code>LinearAlgebra</code> standard library &#40;julia can also save native code, but there is unlikely to be much we can reuse here&#41;.</p>
 <p>Lets confirm that our answers match.</p>
 <pre><code class="julia hljs">approxd(x, y) = isapprox(x, y)
 <span class=hljs-keyword >function</span> approxd(x::ForwardDiff.Dual, y::ForwardDiff.Dual)
   approxd(x.value, y.value) &amp;&amp; approxd(<span class=hljs-built_in >Tuple</span>(x.partials), <span class=hljs-built_in >Tuple</span>(y.partials))
 <span class=hljs-keyword >end</span>
 approxd(x::<span class=hljs-built_in >Tuple</span>, y::<span class=hljs-built_in >Tuple</span>) = all(map(approxd, x, y))
-<span class=hljs-meta >@test</span> approxd(res, rescpp)</code></pre>
+<span class=hljs-meta >@test</span> approxd(res, resclang)</code></pre>
+<pre><code class="julia hljs">Test Passed</code></pre>
+<pre><code class="julia hljs"><span class=hljs-meta >@test</span> approxd(res, resgcc)</code></pre>
 <pre><code class="julia hljs">Test Passed</code></pre>
 <p>Great. Now, let&#39;s visualize where we stand in terms of performance.</p>
 <pre><code class="julia hljs"><span class=hljs-keyword >using</span> CairoMakie
@@ -225,8 +253,8 @@ approxd(x::<span class=hljs-built_in >Tuple</span>, y::<span class=hljs-built_in
     hlines!(ax, [<span class=hljs-number >1</span>])
   f
 <span class=hljs-keyword >end</span>
-cmpplot([<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>], [<span class=hljs-number >1.0</span>, t_exputils/t_clang])</code></pre>
-<p><img src="/figures/bench_notebook_9_1.png" alt="" /></p>
+cmpplot([<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;GCC&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>], [<span class=hljs-number >1.0</span>, t_gcc/t_clang, t_exputils/t_clang])</code></pre>
+<p><img src="/figures/bench_notebook_10_1.png" alt="" /></p>
 <p>Okay, lets try a Julia implementation mirroring our C&#43;&#43; code.</p>
 <pre><code class="julia hljs"><span class=hljs-keyword >using</span> LinearAlgebra
 <span class=hljs-comment >#My C++ `opnorm` implementation only looks at Dual&#x27;s values</span>
@@ -338,13 +366,15 @@ log2ceil(x::<span class=hljs-built_in >Float64</span>) =
 <p>This should do roughly the same thing; does it help?</p>
 <pre><code class="julia hljs">resexpm = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(expm!, Bs, As, testrange);
 <span class=hljs-meta >@test</span> approxd(res, resexpm)
-t_expm = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm!, Bs, As, testrange)
+GC.gc(); t_expm = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm!, Bs, As, testrange)
+<span class=hljs-meta >@show</span> t_expm;
 cmpplot(
-  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>],
-  [<span class=hljs-number >1.0</span>, t_exputils/t_clang, t_expm/t_clang]
+  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;GCC&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>],
+  [<span class=hljs-number >1.0</span>, t_gcc/t_clang, t_exputils/t_clang, t_expm/t_clang]
 )</code></pre>
-<pre><code class="julia hljs"><span class=hljs-number >41.869529</span> seconds (<span class=hljs-number >107.08</span> M allocations: <span class=hljs-number >216.104</span> GiB, <span class=hljs-number >22.80</span>% gc time, <span class=hljs-number >2785.00</span>% compilation time)</code></pre>
-<p><img src="/figures/bench_notebook_11_1.png" alt="" /></p>
+<pre><code class="julia hljs"><span class=hljs-number >53.376298</span> seconds (<span class=hljs-number >175.24</span> M allocations: <span class=hljs-number >466.441</span> GiB, <span class=hljs-number >31.55</span>% gc time, <span class=hljs-number >2205.59</span>% compilation time)
+t_expm = <span class=hljs-number >19.625654611</span></code></pre>
+<p><img src="/figures/bench_notebook_12_1.png" alt="" /></p>
 <p>No, not really. One of the major issues is that <code>mul&#33;</code> is extremely slow for <code>ForwardDiff.Dual</code> numbers. <a href="https://github.com/JuliaLang/julia/pull/52038">Julia PR#52038</a> will help immensely. However, it&#39;ll only be in Julia 1.11, and we&#39;re currently still on the latest release, Julia 1.9.4. So let&#39;s implement the newer matrix multiply method here.</p>
 <pre><code class="julia hljs"><span class=hljs-keyword >function</span> mulreduceinnerloop!(C, A, B)
     AxM = axes(A, <span class=hljs-number >1</span>)
@@ -463,18 +493,20 @@ cmpplot(
 
 resexpmcm = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(expm_custommul!, Bs, As, testrange);
 <span class=hljs-meta >@test</span> approxd(res, resexpmcm)
-t_expm_custommul = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm_custommul!, Bs, As, testrange)
+GC.gc(); t_expm_custommul = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm_custommul!, Bs, As, testrange)
+<span class=hljs-meta >@show</span> t_expm_custommul
 
 cmpplot(
-  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>, <span class=hljs-string >&quot;expm_custommul!&quot;</span>],
-  [t_clang, t_exputils, t_expm, t_expm_custommul] ./ t_clang
+  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;GCC&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>, <span class=hljs-string >&quot;expm_custommul!&quot;</span>],
+  [t_clang, t_gcc, t_exputils, t_expm, t_expm_custommul] ./ t_clang
 )</code></pre>
-<pre><code class="julia hljs"><span class=hljs-number >24.731013</span> seconds (<span class=hljs-number >65.73</span> M allocations: <span class=hljs-number >19.822</span> GiB, <span class=hljs-number >13.65</span>% gc time, <span class=hljs-number >3041.35</span>% compilation time)</code></pre>
-<p><img src="/figures/bench_notebook_12_1.png" alt="" /></p>
+<pre><code class="julia hljs"><span class=hljs-number >30.249130</span> seconds (<span class=hljs-number >109.65</span> M allocations: <span class=hljs-number >41.043</span> GiB, <span class=hljs-number >17.39</span>% gc time, <span class=hljs-number >2692.71</span>% compilation time)
+t_expm_custommul = <span class=hljs-number >7.412792419</span></code></pre>
+<p><img src="/figures/bench_notebook_13_1.png" alt="" /></p>
 <p>That does help a lot&#33; But we&#39;re still well behind.</p>
 <p>Timing shows we&#39;re spending a lot of time in GC:</p>
 <pre><code class="julia hljs"><span class=hljs-meta >@time</span> do_multithreaded_work!(expm_custommul!, Bs, As, testrange);</code></pre>
-<pre><code class="julia hljs"><span class=hljs-number >3.475502</span> seconds (<span class=hljs-number >37.40</span> M allocations: <span class=hljs-number >17.968</span> GiB, <span class=hljs-number >50.47</span>% gc time)</code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >7.516672</span> seconds (<span class=hljs-number >81.32</span> M allocations: <span class=hljs-number >39.189</span> GiB, <span class=hljs-number >48.95</span>% gc time)</code></pre>
 <p>So lets try re-using the same memory through caching preallocations in the task local storage.</p>
 <pre><code class="julia hljs"><span class=hljs-keyword >function</span> tlssimilar(A)
   ret = get!(task_local_storage(), A) <span class=hljs-keyword >do</span>
@@ -559,36 +591,183 @@ cmpplot(
 
 restls = <span class=hljs-meta >@time</span> <span class=hljs-meta >@eval</span> do_multithreaded_work!(expm_tls!, Bs, As, testrange)
 <span class=hljs-meta >@test</span> approxd(res, restls)
-t_tls = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm_tls!, Bs, As, testrange)
+GC.gc(); t_tls = <span class=hljs-meta >@elapsed</span> do_multithreaded_work!(expm_tls!, Bs, As, testrange)
+<span class=hljs-meta >@show</span> t_tls
 
 cmpplot(
-  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>, <span class=hljs-string >&quot;expm_custommul!&quot;</span>, <span class=hljs-string >&quot;expm_tls!&quot;</span>],[t_clang, t_exputils, t_expm, t_expm_custommul, t_tls] ./ t_clang
+  [<span class=hljs-string >&quot;Clang&quot;</span>, <span class=hljs-string >&quot;GCC&quot;</span>, <span class=hljs-string >&quot;ExponentialUtilities.jl&quot;</span>, <span class=hljs-string >&quot;expm!&quot;</span>, <span class=hljs-string >&quot;expm_custommul!&quot;</span>, <span class=hljs-string >&quot;expm_tls!&quot;</span>],
+  [t_clang, t_gcc, t_exputils, t_expm, t_expm_custommul, t_tls] ./ t_clang
 )</code></pre>
-<pre><code class="julia hljs"><span class=hljs-number >22.035270</span> seconds (<span class=hljs-number >51.75</span> M allocations: <span class=hljs-number >3.328</span> GiB, <span class=hljs-number >9.43</span>% gc time, <span class=hljs-number >3303.12</span>% compilation time)</code></pre>
-<p><img src="/figures/bench_notebook_14_1.png" alt="" /></p>
+<pre><code class="julia hljs"><span class=hljs-number >24.303367</span> seconds (<span class=hljs-number >77.87</span> M allocations: <span class=hljs-number >4.959</span> GiB, <span class=hljs-number >9.46</span>% gc time, <span class=hljs-number >3040.07</span>%
+ compilation time)
+t_tls = <span class=hljs-number >3.643992699</span></code></pre>
+<p><img src="/figures/bench_notebook_15_1.png" alt="" /></p>
 <p>That helps a lot&#33;  Note</p>
 <pre><code class="julia hljs">(t_expm_custommul - t_tls) / t_clang</code></pre>
-<pre><code class="julia hljs"><span class=hljs-number >3.340693936386846</span></code></pre>
-<p>The total amount of GC and allocation time we saved from this approach is over 3x the total time C&#43;&#43; required for the entire calculation – including its own heap allocations and deallocations, plus the actual arithmetic.</p>
-<p>I&#39;ll stop for now. But the next two suggestions for improving the Julia code would be:</p>
-<ol>
-<li><p>Checkout a <a href="https://github.com/JuliaDiff/ForwardDiff.jl/pull/570">ForwardDiff PR</a> that uses explicit SIMD for partial accumulation.</p>
+<pre><code class="julia hljs"><span class=hljs-number >3.5055131425453383</span></code></pre>
+<p>The total amount of time we saved from this approach is over 3x the total time C&#43;&#43; required&#33; On top of performing the computations, that includes its own heap allocations and freeing, which the C&#43;&#43; code is still doing but our Julia tls method is avoiding at the cost of increasing the total amount of memory needed through creating task local caches.</p>
+<p>I&#39;ll leave further possible optimizations to the implementation for future work. One last thing we&#39;ll look at here are some LinxuPerf summaries:</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >using</span> LinuxPerf
+GC.gc(); <span class=hljs-meta >@time</span> <span class=hljs-meta >@pstats</span> <span class=hljs-string >&quot;cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)&quot;</span> <span class=hljs-keyword >begin</span>
+  do_multithreaded_work!(expm_tls!, Bs, As, testrange)
+<span class=hljs-keyword >end</span></code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >4.365871</span> seconds (<span class=hljs-number >49.91</span> M allocations: <span class=hljs-number >3.133</span> GiB, <span class=hljs-number >7.57</span>% gc time, <span class=hljs-number >14.85</span>% c
+ompilation time)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╶ cpu-cycles               <span class=hljs-number >2.32e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  1.9 cycles per ns</span>
+┌ instructions             <span class=hljs-number >2.39e+11</span>   <span class=hljs-number >60.1</span>%  <span class=hljs-comment >#  1.0 insns per cycle</span>
+│ branch-instructions      <span class=hljs-number >1.78e+10</span>   <span class=hljs-number >60.1</span>%  <span class=hljs-comment >#  7.4% of insns</span>
+└ branch-misses            <span class=hljs-number >8.26e+08</span>   <span class=hljs-number >60.1</span>%  <span class=hljs-comment >#  4.6% of branch insns</span>
+┌ task-clock               <span class=hljs-number >1.21e+11</span>  <span class=hljs-number >100.0</span>%  <span class=hljs-comment ># 120.9 s</span>
+│ context-switches         <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+│ cpu-migrations           <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+└ page-faults              <span class=hljs-number >9.80e+01</span>  <span class=hljs-number >100.0</span>%
+┌ L1-dcache-load-misses    <span class=hljs-number >2.05e+09</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  2.6% of dcache loads</span>
+│ L1-dcache-loads          <span class=hljs-number >7.77e+10</span>   <span class=hljs-number >20.0</span>%
+└ L1-icache-load-misses    <span class=hljs-number >2.03e+09</span>   <span class=hljs-number >20.0</span>%
+┌ dTLB-load-misses         <span class=hljs-number >2.27e+07</span>   <span class=hljs-number >19.9</span>%  <span class=hljs-comment >#  0.0% of dTLB loads</span>
+└ dTLB-loads               <span class=hljs-number >7.74e+10</span>   <span class=hljs-number >19.9</span>%
+┌ iTLB-load-misses         <span class=hljs-number >3.81e+07</span>   <span class=hljs-number >39.9</span>%  <span class=hljs-comment ># 68.2% of iTLB loads</span>
+└ iTLB-loads               <span class=hljs-number >5.58e+07</span>   <span class=hljs-number >39.9</span>%
+                 aggregated from <span class=hljs-number >53</span> threads
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</code></pre>
+<pre><code class="julia hljs">GC.gc(); <span class=hljs-meta >@time</span> <span class=hljs-meta >@pstats</span> <span class=hljs-string >&quot;cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)&quot;</span> <span class=hljs-keyword >begin</span>
+  do_multithreaded_work!(clangexpm!, Bs, As, testrange)
+<span class=hljs-keyword >end</span></code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >1.318992</span> seconds (<span class=hljs-number >550.82</span> k allocations: <span class=hljs-number >948.071</span> MiB, <span class=hljs-number >16.62</span>% compilation t
+ime: <span class=hljs-number >64</span>% of which was recompilation)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╶ cpu-cycles               <span class=hljs-number >1.05e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  2.8 cycles per ns</span>
+┌ instructions             <span class=hljs-number >1.17e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  1.1 insns per cycle</span>
+│ branch-instructions      <span class=hljs-number >6.69e+09</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  5.7% of insns</span>
+└ branch-misses            <span class=hljs-number >8.24e+08</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment ># 12.3% of branch insns</span>
+┌ task-clock               <span class=hljs-number >3.80e+10</span>  <span class=hljs-number >100.0</span>%  <span class=hljs-comment ># 38.0 s</span>
+│ context-switches         <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+│ cpu-migrations           <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+└ page-faults              <span class=hljs-number >9.20e+01</span>  <span class=hljs-number >100.0</span>%
+┌ L1-dcache-load-misses    <span class=hljs-number >1.59e+09</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  4.8% of dcache loads</span>
+│ L1-dcache-loads          <span class=hljs-number >3.29e+10</span>   <span class=hljs-number >20.0</span>%
+└ L1-icache-load-misses    <span class=hljs-number >2.88e+08</span>   <span class=hljs-number >20.0</span>%
+┌ dTLB-load-misses         <span class=hljs-number >5.73e+05</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  0.0% of dTLB loads</span>
+└ dTLB-loads               <span class=hljs-number >3.29e+10</span>   <span class=hljs-number >20.0</span>%
+┌ iTLB-load-misses         <span class=hljs-number >2.33e+05</span>   <span class=hljs-number >39.9</span>%  <span class=hljs-comment >#  1.8% of iTLB loads</span>
+└ iTLB-loads               <span class=hljs-number >1.33e+07</span>   <span class=hljs-number >39.9</span>%
+                 aggregated from <span class=hljs-number >36</span> threads
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</code></pre>
+<pre><code class="julia hljs">GC.gc(); <span class=hljs-meta >@time</span> <span class=hljs-meta >@pstats</span> <span class=hljs-string >&quot;cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)&quot;</span> <span class=hljs-keyword >begin</span>
+  do_multithreaded_work!(gccexpm!, Bs, As, testrange)
+<span class=hljs-keyword >end</span></code></pre>
+<pre><code class="julia hljs"><span class=hljs-number >1.387551</span> seconds (<span class=hljs-number >461.69</span> k allocations: <span class=hljs-number >942.042</span> MiB, <span class=hljs-number >11.61</span>% compilation t
+ime: <span class=hljs-number >87</span>% of which was recompilation)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╶ cpu-cycles               <span class=hljs-number >1.21e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  2.8 cycles per ns</span>
+┌ instructions             <span class=hljs-number >1.45e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  1.2 insns per cycle</span>
+│ branch-instructions      <span class=hljs-number >8.73e+09</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  6.0% of insns</span>
+└ branch-misses            <span class=hljs-number >7.50e+08</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  8.6% of branch insns</span>
+┌ task-clock               <span class=hljs-number >4.38e+10</span>  <span class=hljs-number >100.0</span>%  <span class=hljs-comment ># 43.8 s</span>
+│ context-switches         <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+│ cpu-migrations           <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+└ page-faults              <span class=hljs-number >5.00e+00</span>  <span class=hljs-number >100.0</span>%
+┌ L1-dcache-load-misses    <span class=hljs-number >1.70e+09</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  3.9% of dcache loads</span>
+│ L1-dcache-loads          <span class=hljs-number >4.33e+10</span>   <span class=hljs-number >20.0</span>%
+└ L1-icache-load-misses    <span class=hljs-number >2.67e+08</span>   <span class=hljs-number >20.0</span>%
+┌ dTLB-load-misses         <span class=hljs-number >5.19e+05</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  0.0% of dTLB loads</span>
+└ dTLB-loads               <span class=hljs-number >4.33e+10</span>   <span class=hljs-number >20.0</span>%
+┌ iTLB-load-misses         <span class=hljs-number >2.34e+05</span>   <span class=hljs-number >40.0</span>%  <span class=hljs-comment >#  1.7% of iTLB loads</span>
+└ iTLB-loads               <span class=hljs-number >1.34e+07</span>   <span class=hljs-number >40.0</span>%
+                 aggregated from <span class=hljs-number >36</span> threads
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</code></pre>
+<p>The most striking differences here are in the number of instructions, and in the number of icache-load misses, about one per two-hundred clock cycles for Julia, versus about one per five-hundred for the C&#43;&#43; implementations.</p>
+<p>With this in mind, the next optimization to try would be <a href="https://github.com/JuliaDiff/ForwardDiff.jl/pull/570">ForwardDiff#570</a>, a PR which adds explicit SIMD accumulation of partials. Trying it on Julia master, I get:</p>
+<pre><code class="julia hljs">julia&gt; GC.gc(); <span class=hljs-meta >@time</span> do_multithreaded_work!(expm_tls!, Bs, As, testrange);
+  <span class=hljs-number >1.662658</span> seconds (<span class=hljs-number >21.29</span> M allocations: <span class=hljs-number >728.873</span> MiB, <span class=hljs-number >4.92</span>% gc time)
 
-<li><p>Try <a href="https://github.com/MasonProtter/Bumper.jl/">Bumper.jl</a>, which is a better approach than TLS.</p>
+julia&gt; GC.gc(); <span class=hljs-meta >@time</span> do_multithreaded_work!(clangexpm!, Bs, As, testrange);
+  <span class=hljs-number >1.055576</span> seconds (<span class=hljs-number >8.41</span> k allocations: <span class=hljs-number >4.532</span> MiB)
 
-</ol>
-<p>To build the notebook, you need Clang 17 installed on the path and Weave. Checkout <a href="https://github.com/chriselrod/MatrixExp/">MatrixExp</a>, start Julia, and run:</p>
-<pre><code class="julia hljs"><span class=hljs-keyword >using</span> Weave
-weave(<span class=hljs-string >&quot;bench_notebook.jmd&quot;</span>, informat=<span class=hljs-string >&quot;markdown&quot;</span>, doctype=<span class=hljs-string >&quot;github&quot;</span>)</code></pre>
+julia&gt; GC.gc(); <span class=hljs-meta >@time</span> do_multithreaded_work!(gccexpm!, Bs, As, testrange);
+  <span class=hljs-number >1.200929</span> seconds (<span class=hljs-number >8.41</span> k allocations: <span class=hljs-number >4.532</span> MiB)
+
+julia&gt; GC.gc(); <span class=hljs-meta >@time</span> <span class=hljs-meta >@pstats</span> <span class=hljs-string >&quot;cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)&quot;</span> <span class=hljs-keyword >begin</span>
+         do_multithreaded_work!(expm_tls!, Bs, As, testrange)
+       <span class=hljs-keyword >end</span>
+  <span class=hljs-number >1.718740</span> seconds (<span class=hljs-number >21.33</span> M allocations: <span class=hljs-number >731.359</span> MiB, <span class=hljs-number >4.51</span>% gc time, <span class=hljs-number >1.47</span>% compilation time)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╶ cpu-cycles               <span class=hljs-number >1.59e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  2.7 cycles per ns</span>
+┌ instructions             <span class=hljs-number >1.87e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  1.2 insns per cycle</span>
+│ branch-instructions      <span class=hljs-number >1.02e+10</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  5.4% of insns</span>
+└ branch-misses            <span class=hljs-number >8.47e+08</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  8.3% of branch insns</span>
+┌ task-clock               <span class=hljs-number >5.79e+10</span>  <span class=hljs-number >100.0</span>%  <span class=hljs-comment ># 57.9 s</span>
+│ context-switches         <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+│ cpu-migrations           <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+└ page-faults              <span class=hljs-number >1.00e+00</span>  <span class=hljs-number >100.0</span>%
+┌ L1-dcache-load-misses    <span class=hljs-number >1.98e+09</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  3.3% of dcache loads</span>
+│ L1-dcache-loads          <span class=hljs-number >6.03e+10</span>   <span class=hljs-number >20.0</span>%
+└ L1-icache-load-misses    <span class=hljs-number >8.28e+08</span>   <span class=hljs-number >20.0</span>%
+┌ dTLB-load-misses         <span class=hljs-number >2.45e+07</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  0.0% of dTLB loads</span>
+└ dTLB-loads               <span class=hljs-number >6.03e+10</span>   <span class=hljs-number >20.0</span>%
+┌ iTLB-load-misses         <span class=hljs-number >1.84e+07</span>   <span class=hljs-number >40.0</span>%  <span class=hljs-comment ># 59.7% of iTLB loads</span>
+└ iTLB-loads               <span class=hljs-number >3.09e+07</span>   <span class=hljs-number >40.0</span>%
+                 aggregated from <span class=hljs-number >53</span> threads
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+julia&gt; GC.gc(); <span class=hljs-meta >@time</span> <span class=hljs-meta >@pstats</span> <span class=hljs-string >&quot;cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)&quot;</span> <span class=hljs-keyword >begin</span>
+         do_multithreaded_work!(clangexpm!, Bs, As, testrange)
+       <span class=hljs-keyword >end</span>
+  <span class=hljs-number >1.111501</span> seconds (<span class=hljs-number >48.01</span> k allocations: <span class=hljs-number >7.017</span> MiB, <span class=hljs-number >2.26</span>% compilation time)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╶ cpu-cycles               <span class=hljs-number >1.05e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  2.7 cycles per ns</span>
+┌ instructions             <span class=hljs-number >1.16e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  1.1 insns per cycle</span>
+│ branch-instructions      <span class=hljs-number >6.65e+09</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  5.7% of insns</span>
+└ branch-misses            <span class=hljs-number >7.99e+08</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment ># 12.0% of branch insns</span>
+┌ task-clock               <span class=hljs-number >3.82e+10</span>  <span class=hljs-number >100.0</span>%  <span class=hljs-comment ># 38.2 s</span>
+│ context-switches         <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+│ cpu-migrations           <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+└ page-faults              <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+┌ L1-dcache-load-misses    <span class=hljs-number >1.58e+09</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  4.8% of dcache loads</span>
+│ L1-dcache-loads          <span class=hljs-number >3.28e+10</span>   <span class=hljs-number >20.0</span>%
+└ L1-icache-load-misses    <span class=hljs-number >2.78e+08</span>   <span class=hljs-number >20.0</span>%
+┌ dTLB-load-misses         <span class=hljs-number >2.60e+05</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  0.0% of dTLB loads</span>
+└ dTLB-loads               <span class=hljs-number >3.28e+10</span>   <span class=hljs-number >20.0</span>%
+┌ iTLB-load-misses         <span class=hljs-number >1.74e+05</span>   <span class=hljs-number >40.0</span>%  <span class=hljs-comment >#  1.4% of iTLB loads</span>
+└ iTLB-loads               <span class=hljs-number >1.28e+07</span>   <span class=hljs-number >40.0</span>%
+                 aggregated from <span class=hljs-number >36</span> threads
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+julia&gt; GC.gc(); <span class=hljs-meta >@time</span> <span class=hljs-meta >@pstats</span> <span class=hljs-string >&quot;cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)&quot;</span> <span class=hljs-keyword >begin</span>
+         do_multithreaded_work!(gccexpm!, Bs, As, testrange)
+       <span class=hljs-keyword >end</span>
+  <span class=hljs-number >1.257558</span> seconds (<span class=hljs-number >48.00</span> k allocations: <span class=hljs-number >7.014</span> MiB, <span class=hljs-number >2.03</span>% compilation time)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+╶ cpu-cycles               <span class=hljs-number >1.20e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  2.7 cycles per ns</span>
+┌ instructions             <span class=hljs-number >1.44e+11</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  1.2 insns per cycle</span>
+│ branch-instructions      <span class=hljs-number >8.69e+09</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  6.0% of insns</span>
+└ branch-misses            <span class=hljs-number >7.38e+08</span>   <span class=hljs-number >60.0</span>%  <span class=hljs-comment >#  8.5% of branch insns</span>
+┌ task-clock               <span class=hljs-number >4.35e+10</span>  <span class=hljs-number >100.0</span>%  <span class=hljs-comment ># 43.5 s</span>
+│ context-switches         <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+│ cpu-migrations           <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+└ page-faults              <span class=hljs-number >0.00e+00</span>  <span class=hljs-number >100.0</span>%
+┌ L1-dcache-load-misses    <span class=hljs-number >1.68e+09</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  3.9% of dcache loads</span>
+│ L1-dcache-loads          <span class=hljs-number >4.32e+10</span>   <span class=hljs-number >20.0</span>%
+└ L1-icache-load-misses    <span class=hljs-number >2.55e+08</span>   <span class=hljs-number >20.0</span>%
+┌ dTLB-load-misses         <span class=hljs-number >2.81e+05</span>   <span class=hljs-number >20.0</span>%  <span class=hljs-comment >#  0.0% of dTLB loads</span>
+└ dTLB-loads               <span class=hljs-number >4.32e+10</span>   <span class=hljs-number >20.0</span>%
+┌ iTLB-load-misses         <span class=hljs-number >1.22e+05</span>   <span class=hljs-number >40.0</span>%  <span class=hljs-comment >#  1.1% of iTLB loads</span>
+└ iTLB-loads               <span class=hljs-number >1.10e+07</span>   <span class=hljs-number >40.0</span>%
+                 aggregated from <span class=hljs-number >36</span> threads
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</code></pre>
+<p>Which is finally within 2x of GCC and Clang&#33;</p>
 <p>These results were obtained using</p>
-<pre><code class="julia hljs">julia&gt; versioninfo()
-Julia Version <span class=hljs-number >1.9</span><span class=hljs-number >.4</span>
+<pre><code class="julia hljs"><span class=hljs-keyword >using</span> InteractiveUtils: versioninfo
+versioninfo()</code></pre>
+<pre><code class="julia hljs">Julia Version <span class=hljs-number >1.9</span><span class=hljs-number >.4</span>
 Commit <span class=hljs-number >8e5136</span>fa29 (<span class=hljs-number >2023</span>-<span class=hljs-number >11</span>-<span class=hljs-number >14</span> <span class=hljs-number >08</span>:<span class=hljs-number >46</span> UTC)
 Build Info:
 
     Note: This is an unofficial build, please report bugs to the project
     responsible <span class=hljs-keyword >for</span> this build and not to the Julia project unless you can
-    reproduce the issue <span class=hljs-keyword >using</span> official builds available at https://julialang.org/downloads
+    reproduce the issue <span class=hljs-keyword >using</span> official builds available at https://julialan
+g.org/downloads
 
 Platform Info:
   OS: Linux (x86_64-generic-linux)
@@ -596,12 +775,20 @@ Platform Info:
   WORD_SIZE: <span class=hljs-number >64</span>
   LIBM: libopenlibm
   LLVM: libLLVM-<span class=hljs-number >14.0</span><span class=hljs-number >.6</span> (ORCJIT, cascadelake)
-  Threads: <span class=hljs-number >36</span> on <span class=hljs-number >36</span> virtual cores</code></pre>
-<p>Using 36 threads exagerates scaling differences compared to systems with fewer threads.</p>
+  Threads: <span class=hljs-number >36</span> on <span class=hljs-number >36</span> virtual cores
+Environment:
+  LD_LIBRARY_PATH = /usr/<span class=hljs-keyword >local</span>/lib/x86_64-unknown-linux-gnu/:/usr/<span class=hljs-keyword >local</span>/lib
+/
+  LD_UN_PATH = /usr/<span class=hljs-keyword >local</span>/lib/x86_64-unknown-linux-gnu/:/usr/<span class=hljs-keyword >local</span>/lib/
+  JULIA_NUM_THREADS = <span class=hljs-number >36</span>
+  JULIA_PATH = @.</code></pre>
+<p>To build the notebook, you need Clang 17 installed on the path and Weave.</p>
+<pre><code class="julia hljs"><span class=hljs-keyword >using</span> Weave
+weave(<span class=hljs-string >&quot;bench_notebook.jmd&quot;</span>, informat=<span class=hljs-string >&quot;markdown&quot;</span>, doctype=<span class=hljs-string >&quot;github&quot;</span>)</code></pre>
 <div class=page-foot >
   <div class="copyright bt b--moon-gray mt4 pt2">
       <small class=silver >
-    &copy; Chris Elrod, Yingbo Ma. Last modified: November 27, 2023. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>.
+    &copy; Chris Elrod, Yingbo Ma. Last modified: November 29, 2023. Website built with <a href="https://github.com/tlienart/Franklin.jl">Franklin.jl</a> and the <a href="https://julialang.org">Julia programming language</a>.
       </small>
   </div>
 </div>

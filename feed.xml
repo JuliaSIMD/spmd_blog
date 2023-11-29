@@ -28,10 +28,10 @@
   <link> https://spmd.org/posts/multithreadedallocations/index.html </link>
   <guid> https://spmd.org/posts/multithreadedallocations/index.html </guid>
   <description>
-    <![CDATA[  Improving performance with multithreaded workloads  ]]>
+    <![CDATA[  Optimizing Multithreaded Julia Allocations Matrix Exponential C&#43;&#43;  ]]>
   </description>  
     
-  <pubDate>Sun, 26 Nov 2023 00:00:00 +0000</pubDate>  
+  <pubDate>Wed, 29 Nov 2023 00:00:00 +0000</pubDate>  
   
   
   <atom:author>

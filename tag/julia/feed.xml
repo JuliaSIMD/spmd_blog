@@ -23,6 +23,25 @@
 
 <item>
   <title>
+    <![CDATA[  Competing with C&#43;&#43; with Julia in multithreaded, allocating code  ]]>
+  </title>
+  <link> https://spmd.org/posts/multithreadedallocations/index.html </link>
+  <guid> https://spmd.org/posts/multithreadedallocations/index.html </guid>
+  <description>
+    <![CDATA[  Optimizing Multithreaded Julia Allocations Matrix Exponential C&#43;&#43;  ]]>
+  </description>  
+    
+  <pubDate>Wed, 29 Nov 2023 00:00:00 +0000</pubDate>  
+  
+  
+  <atom:author>
+    <atom:name>Chris Elrod, Yingbo Ma</atom:name>
+  </atom:author>
+        
+</item>
+
+<item>
+  <title>
     <![CDATA[  Optimizing Symmetric Quadratic Form  ]]>
   </title>
   <link> https://spmd.org/posts/optimizing_symmetric_quadratic_form/index.html </link>
