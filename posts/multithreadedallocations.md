@@ -1,12 +1,11 @@
 +++
 title = "Competing with C++ with Julia in multithreaded, allocating code"
-date = Date(2023, 11, 29)
+author = "Chris Elrod"
+date = Date(2023, 12, 6)
 rss = "Optimizing Multithreaded Julia Allocations Matrix Exponential C++"
 +++
 
-@def tags = ["c++", "julia", "allocation", "matrix exponential"]
-
-# Benchmarking test case
+#Benchmarking test case
 
 Our benchmark test case will be applying ForwardMode AD with dual numbers with dynamically sized square matrices of size 2x2...8x8 on multiple threads.
 We'll test no duals, and dual sizes `1:8` for single derivatives, and `1:8` by `1:2` for second derivatives. This gives us a large number of combinations, which increases the working memory we need a bit.
@@ -17,16 +16,16 @@ The function we're benchmarking:
 ```julia
 using Base.Threads
 
-# utilities for dealing with nested tuples
-# we use nested instead of flat tuples to avoid heuristics
-# that avoid specializing on long tuples
+#utilities for dealing with nested tuples
+#we use nested instead of flat tuples to avoid heuristics
+#that avoid specializing on long tuples
 rmap(f, ::Tuple{}) = ()
 rmap(f::F, x::Tuple) where {F} = map(f, x)
 rmap(f::F, x::Tuple{Vararg{Tuple,K}}) where {F,K} = map(Base.Fix1(rmap, f), x)
 rmap(f, ::Tuple{}, ::Tuple{}) = ()
 rmap(f::F, x::Tuple, y::Tuple) where {F} = map(f, x, y)
 rmap(f::F, x::Tuple{Vararg{Tuple,K}}, y::Tuple{Vararg{Tuple,K}}) where {F,K} = map((a,b)->rmap(f,a,b), x, y)
-# rmaptnum applies `f` to a tuple of non - tuples
+#rmaptnum applies `f` to a tuple of non - tuples
 rmaptnum(f, ::Tuple{}) = ()
 rmaptnum(f::F, x::Tuple{Vararg{Tuple{Vararg}}}) where {F} = map(f, x)
 rmaptnum(f::F, x::Tuple{Vararg{Tuple{Vararg{Tuple}}}}) where {F} = map(Base.Fix1(rmaptnum,f), x)
@@ -67,11 +66,7 @@ function do_multithreaded_work!(f!::F, Bs, As, r) where {F}
         ret = rmap(+, ret, Threads.fetch(tasks[n]))
     end
     return ret
-end
-```
-
-```julia
-do_multithreaded_work! (generic function with 1 method)
+end;
 ```
 
 
@@ -87,12 +82,12 @@ function dualify(A, n, j)
   n == 0 && return A
   j == 0 ? d.(A, n) : d.(d.(A, n), j)
 end
-randdual(n, dinner, douter) = dualify(rand(n,n), dinner, douter)
+randdual(n, dinner, douter) = dualify(rand(n, n), dinner, douter)
 max_size = 5;
-As = map((0,1,2)) do dout # outer dual
-  map(ntuple(identity,Val(9)).-1) do din # inner dual
-    map(ntuple(identity,Val(max_size-1)).+1) do n # matrix size
-      randdual(n,din,dout)
+As = map((0, 1, 2)) do dout #outer dual
+  map( ntuple(identity, Val(9)) .- 1) do din #inner dual
+    map(ntuple(identity, Val(max_size - 1)) .+ 1) do n #matrix size
+      randdual(n, din, dout)
     end
   end
 end;
@@ -102,8 +97,7 @@ Bs = rmap(similar, As);
 
 
 
-Lets set C++ as a baseline with this.
-We'll base our implementation on [StaticArrays.exp](https://github.com/JuliaArrays/StaticArrays.jl/blob/72d2bd3538235c9162f630a5130112b83eaa0af7/src/expm.jl#L75-L129), as this implementation is simpler than the one from `ExponentialUtilities.jl`. The core of our C++ implementation is only 50 lines of code:
+  Lets set C++ as a baseline with this.We'll base our implementation on [StaticArrays.exp](https://github.com/JuliaArrays/StaticArrays.jl/blob/72d2bd3538235c9162f630a5130112b83eaa0af7/src/expm.jl#L75-L129), as this implementation is simpler than the one from `ExponentialUtilities.jl`. The core of our C++ implementation is only 50 lines of code:
 ```cpp
 template <typename T> constexpr void expm(MutSquarePtrMatrix<T> A) {
   ptrdiff_t n = ptrdiff_t(A.numRow()), s = 0;
@@ -158,35 +152,47 @@ template <typename T> constexpr void expm(MutSquarePtrMatrix<T> A) {
 ```
 Now, to compile it
 ```julia
-withenv("CXX"=>"clang++") do 
+withenv("CXX" => "clang++") do
   @time run(`cmake -S . -B buildclang -DCMAKE_BUILD_TYPE=Release -DCMAKE_UNITY_BUILD=ON`)
 end
-withenv("CXX"=>"g++") do 
+withenv("CXX" => "g++") do
   @time run(`cmake -S . -B buildgcc -DCMAKE_BUILD_TYPE=Release -DCMAKE_UNITY_BUILD=ON`)
 end
 @time run(`cmake --build buildclang`);
 @time run(`cmake --build buildgcc`);
 ```
 
-```sh
+```julia
+-- The CXX compiler identification is Clang 17.0.5
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /bin/clang++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
 -- CPM: Adding package PackageProject.cmake@1.8.0 (v1.8.0 at /home/chriselr
 od/.cache/CPM/packageproject.cmake/987b02f8a9fe04de3c43e0e7a1afbb29c87adc5e
 )
 -- Using 2 batch size
--- Configuring done (1.0s)
+-- Configuring done (1.2s)
 -- Generating done (0.0s)
 -- Build files have been written to: /home/chriselrod/Documents/progwork/cx
 x/MatrixExp/buildclang
-  1.078926 seconds (103 allocations: 203.492 KiB)
+  1.208517 seconds (157 allocations: 204.523 KiB)
+-- The CXX compiler identification is GNU 13.2.1
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /bin/g++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
 -- CPM: Adding package PackageProject.cmake@1.8.0 (v1.8.0 at /home/chriselr
 od/.cache/CPM/packageproject.cmake/987b02f8a9fe04de3c43e0e7a1afbb29c87adc5e
 )
 -- Using 2 batch size
--- Configuring done (0.9s)
+-- Configuring done (1.1s)
 -- Generating done (0.0s)
 -- Build files have been written to: /home/chriselrod/Documents/progwork/cx
 x/MatrixExp/buildgcc
-  0.929433 seconds (100 allocations: 2.945 KiB)
+  1.078525 seconds (154 allocations: 3.977 KiB)
 [  0%] Built target Math
 [  7%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_12_cxx.cxx.
 o
@@ -206,15 +212,15 @@ o
 [ 92%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_0_cxx.cxx.o
 [100%] Linking CXX shared library libMatrixExp.so
 [100%] Built target MatrixExp
-  5.193901 seconds (191 allocations: 4.391 KiB)
+  4.544968 seconds (191 allocations: 4.391 KiB)
 [  0%] Built target Math
 [  7%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_12_cxx.cxx.
 o
 [ 14%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_11_cxx.cxx.
 o
-[ 21%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_10_cxx.cxx.
+[ 21%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_9_cxx.cxx.o
+[ 28%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_10_cxx.cxx.
 o
-[ 28%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_9_cxx.cxx.o
 [ 35%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_8_cxx.cxx.o
 [ 42%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_7_cxx.cxx.o
 [ 50%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_6_cxx.cxx.o
@@ -226,7 +232,7 @@ o
 [ 92%] Building CXX object CMakeFiles/MatrixExp.dir/Unity/unity_0_cxx.cxx.o
 [100%] Linking CXX shared library libMatrixExp.so
 [100%] Built target MatrixExp
-  4.866813 seconds (182 allocations: 4.219 KiB)
+  4.321814 seconds (191 allocations: 4.391 KiB)
 ```
 
 
@@ -238,7 +244,6 @@ const libExpMatGCC = joinpath(@__DIR__, "buildgcc/libMatrixExp.so")
 const libExpMatClang = joinpath(@__DIR__, "buildclang/libMatrixExp.so")
 for (lib, cc) in ((:libExpMatGCC, :gcc), (:libExpMatClang, :clang))
   j = Symbol(cc, :expm!)
-
   @eval $j(A::Matrix{Float64}) =
     @ccall $lib.expmf64(A::Ptr{Float64}, size(A, 1)::Clong)::Nothing
   for n = 1:8
@@ -262,17 +267,19 @@ So, now, let's set clang as baseline (as it uses LLVM, like Julia):
 ```julia
 testrange = range(0.001, stop = 6.0, length=1<<16);
 resclang = @time @eval do_multithreaded_work!(clangexpm!, Bs, As, testrange);
-GC.gc(); t_clang = @elapsed do_multithreaded_work!(clangexpm!, Bs, As, testrange);
+GC.gc();
+t_clang = @elapsed do_multithreaded_work!(clangexpm!, Bs, As, testrange);
 resgcc = @time @eval do_multithreaded_work!(gccexpm!, Bs, As, testrange);
-GC.gc(); t_gcc = @elapsed do_multithreaded_work!(gccexpm!, Bs, As, testrange);
+GC.gc();
+t_gcc = @elapsed do_multithreaded_work!(gccexpm!, Bs, As, testrange);
 @show t_clang t_gcc;
 ```
 
 ```julia
-4.672876 seconds (6.21 M allocations: 1.280 GiB, 2.34% gc time, 2418.26% compilation time)
-  2.013181 seconds (826.92 k allocations: 967.335 MiB, 1.93% gc time, 1181.39% compilation time)
-t_clang = 1.07510643
-t_gcc = 1.214891182
+3.877563 seconds (6.26 M allocations: 1.283 GiB, 3.41% gc time, 2427.35% compilation time)
+1.582645 seconds (827.49 k allocations: 967.367 MiB, 2.70% gc time, 1280.43% compilation time)
+t_clang = 0.796717248
+t_gcc = 0.879461508
 ```
 
 
@@ -286,28 +293,29 @@ using ForwardDiff, Test
 A = rand(4, 4)
 @test_throws MethodError ForwardDiff.gradient(sum∘exp, A)
 using ExponentialUtilities
-ForwardDiff.gradient(sum∘exponential!∘copy, A); # no throw
+ForwardDiff.gradient(sum∘exponential!∘copy, A);
+#no throw
 ```
 
 
 
-It could be this just works great and we can go home/end the blog post early. =)
-So, let's see how it compares.
+It could be this just works great and we can go home / end the blog post early. =) So, let's see how it compares.
 ```julia
 res = @time do_multithreaded_work!(exponential!, Bs, As, testrange);
-GC.gc(); t_exputils = @elapsed do_multithreaded_work!(exponential!, Bs, As, testrange);
+GC.gc();
+t_exputils = @elapsed do_multithreaded_work!(exponential!, Bs, As, testrange);
 @show t_exputils;
 ```
 
 ```julia
-224.519678 seconds (319.87 M allocations: 462.541 GiB, 9.83% gc time, 3258.87% compilation time)
-t_exputils = 19.837025301
+193.872166 seconds (320.69 M allocations: 461.891 GiB, 11.27% gc time, 3223.70% compilation time)
+t_exputils = 18.912085601
 ```
 
 
 
 
-Oof -- compare both that compile time, and the runtime! Future Julia compile times are going to be a bit better thanks to being able to reuse some of the code that was compiled above. We especially have a lot of code in common among our subsequent function calls. Lets also ignore the fact that we are not using features such as precompiled headers in C++, while provides the equivalent of pre-parsing modules like `ForwardDiff.jl`, `ExponentialUtilities.jl`, or the `LinearAlgebra` standard library (julia can also save native code, but there is unlikely to be much we can reuse here).
+Oof -- compare both that compile time, and the runtime!
 
 Lets confirm that our answers match.
 ```julia
@@ -437,17 +445,17 @@ function expm!(A::AbstractMatrix)
       mul!(A2, A, A)
       A4 = A2 * A2
       A6 = A2 * A4
-      #we use `U` as a temporary here that we didn't
-      #need in the C++ code for the estrin - style polynomial
-      #evaluation.Thankfully we don't need another allocation!
+#we use `U` as a temporary here that we didn't
+#need in the C++ code for the estrin - style polynomial
+#evaluation.Thankfully we don't need another allocation!
       @. U = A6 + 16380 * A4 + 40840800 * A2
       mul!(B, A6, U)
       @. B += 33522128640 * A6 + 10559470521600 * A4 + 1187353796428800 * A2
       @view(B[diagind(B)]) .+= 32382376266240000
       mul!(U, A, B)
-      # `A` being filled by the answer
-      #we use `B` as a temporary here we didn't
-      #need in the C++ code
+# `A` being filled by the answer
+#we use `B` as a temporary here we didn't
+#need in the C++ code
       @. B = 182 * A6 + 960960 * A4 + 1323241920 * A2
       mul!(A, A6, B)
       @. A += 670442572800 * A6 + 129060195264000 * A4 +
@@ -463,21 +471,18 @@ function expm!(A::AbstractMatrix)
     mul!(U, A, A)
     A, U = U, A
   end
-end
-```
-
-```julia
-expm! (generic function with 1 method)
+end;
 ```
 
 
 
-
-This should do roughly the same thing; does it help?
+This should do roughly the same thing;
+does it help ?
 ```julia
 resexpm = @time @eval do_multithreaded_work!(expm!, Bs, As, testrange);
 @test approxd(res, resexpm)
-GC.gc(); t_expm = @elapsed do_multithreaded_work!(expm!, Bs, As, testrange)
+GC.gc();
+t_expm = @elapsed do_multithreaded_work!(expm!, Bs, As, testrange)
 @show t_expm;
 cmpplot(
   ["Clang", "GCC", "ExponentialUtilities.jl", "expm!"],
@@ -486,8 +491,8 @@ cmpplot(
 ```
 
 ```julia
-53.376298 seconds (175.24 M allocations: 466.441 GiB, 31.55% gc time, 2205.59% compilation time)
-t_expm = 19.625654611
+48.529428 seconds (175.40 M allocations: 465.740 GiB, 35.11% gc time, 2093.19% compilation time)
+t_expm = 19.342165029
 ```
 
 ![](/figures/bench_notebook_12_1.png)
@@ -546,14 +551,14 @@ function expm_custommul!(A::AbstractMatrix)
   if (nA = opnorm1(A); nA <= 0.015)
     mulreduceinnerloop!(A2, A, A)
     mulreduceinnerloop!(U, A, A2 + 60.0I)
-    #broadcasting doesn't work with `I`
+#broadcasting doesn't work with `I`
     A .= 12.0 .* A2
     @view(A[diagind(A)]) .+= 120.0
   else
     B = similar(A)
     if nA <= 2.1
       mulreduceinnerloop!(A2, A, A)
-      #No need to specialize on different tuple sizes
+#No need to specialize on different tuple sizes
       if nA > 0.95
         p0 = (1.0, 3960.0, 2162160.0, 302702400.0, 8821612800.0)
         p1 = (90.0, 110880.0, 3.027024e7, 2.0756736e9, 1.76432256e10)
@@ -581,19 +586,19 @@ function expm_custommul!(A::AbstractMatrix)
       mulreduceinnerloop!(A2, A, A)
       A4 = mulreduceinnerloop!(similar(A), A2, A2)
       A6 = mulreduceinnerloop!(similar(A), A2, A4)
-      #we use `U` as a temporary here that we didn't
-      #need in the C++ code for the estrin - style polynomial
-      #evaluation.Thankfully we don't need another allocation!
+#we use `U` as a temporary here that we didn't
+#need in the C++ code for the estrin - style polynomial
+#evaluation.Thankfully we don't need another allocation!
       @. U = A6 + 16380 * A4 + 40840800 * A2
       mulreduceinnerloop!(B, A6, U)
       @. B += 33522128640 * A6 + 10559470521600 * A4 + 1187353796428800 * A2
       @view(B[diagind(B)]) .+= 32382376266240000
       mulreduceinnerloop!(U, A, B)
-      #Like in the C++ code, we swap A and U `s` times at the end
-      #so if `s` is odd, we pre - swap to end with the original
-      # `A` being filled by the answer
-      #we use `B` as a temporary here we didn't
-      #need in the C++ code
+#Like in the C++ code, we swap A and U `s` times at the end
+#so if `s` is odd, we pre - swap to end with the original
+# `A` being filled by the answer
+#we use `B` as a temporary here we didn't
+#need in the C++ code
       @. B = 182 * A6 + 960960 * A4 + 1323241920 * A2
       mulreduceinnerloop!(A, A6, B)
       @. A += 670442572800 * A6 + 129060195264000 * A4 +
@@ -611,7 +616,7 @@ function expm_custommul!(A::AbstractMatrix)
   end
 end
 
-# Testing and timing:
+#Testing and timing:
 
 resexpmcm = @time @eval do_multithreaded_work!(expm_custommul!, Bs, As, testrange);
 @test approxd(res, resexpmcm)
@@ -625,8 +630,8 @@ cmpplot(
 ```
 
 ```julia
-30.249130 seconds (109.65 M allocations: 41.043 GiB, 17.39% gc time, 2692.71% compilation time)
-t_expm_custommul = 7.412792419
+24.993893 seconds (109.88 M allocations: 41.061 GiB, 20.61% gc time, 2622.92% compilation time)
+t_expm_custommul = 6.679263822
 ```
 
 ![](/figures/bench_notebook_13_1.png)
@@ -640,7 +645,7 @@ Timing shows we're spending a lot of time in GC:
 ```
 
 ```julia
-7.516672 seconds (81.32 M allocations: 39.189 GiB, 48.95% gc time)
+6.677727 seconds (81.55 M allocations: 39.207 GiB, 54.89% gc time)
 ```
 
 
@@ -665,13 +670,13 @@ function expm_tls!(A::AbstractMatrix)
     B .= A2
     @view(B[diagind(B)]) .+= 60.0
     mulreduceinnerloop!(U, A, B)
-    #broadcasting doesn't work with `I`
+#broadcasting doesn't work with `I`
     A .= 12.0 .* A2
     @view(A[diagind(A)]) .+= 120.0
   else
     if nA <= 2.1
       mulreduceinnerloop!(A2, A, A)
-      #No need to specialize on different tuple sizes
+#No need to specialize on different tuple sizes
       if nA > 0.95
         p0 = (1.0, 3960.0, 2162160.0, 302702400.0, 8821612800.0)
         p1 = (90.0, 110880.0, 3.027024e7, 2.0756736e9, 1.76432256e10)
@@ -699,19 +704,19 @@ function expm_tls!(A::AbstractMatrix)
       mulreduceinnerloop!(A2, A, A)
       mulreduceinnerloop!(A4, A2, A2)
       mulreduceinnerloop!(A6, A2, A4)
-      #we use `U` as a temporary here that we didn't
-      #need in the C++ code for the estrin - style polynomial
-      #evaluation.Thankfully we don't need another allocation!
+#we use `U` as a temporary here that we didn't
+#need in the C++ code for the estrin - style polynomial
+#evaluation.Thankfully we don't need another allocation!
       @. U = A6 + 16380 * A4 + 40840800 * A2
       mulreduceinnerloop!(B, A6, U)
       @. B += 33522128640 * A6 + 10559470521600 * A4 + 1187353796428800 * A2
       @view(B[diagind(B)]) .+= 32382376266240000
       mulreduceinnerloop!(U, A, B)
-      #Like in the C++ code, we swap A and U `s` times at the end
-      #so if `s` is odd, we pre - swap to end with the original
-      # `A` being filled by the answer
-      #we use `B` as a temporary here we didn't
-      #need in the C++ code
+#Like in the C++ code, we swap A and U `s` times at the end
+#so if `s` is odd, we pre - swap to end with the original
+# `A` being filled by the answer
+#we use `B` as a temporary here we didn't
+#need in the C++ code
       @. B = 182 * A6 + 960960 * A4 + 1323241920 * A2
       mulreduceinnerloop!(A, A6, B)
       @. A += 670442572800 * A6 + 129060195264000 * A4 +
@@ -741,13 +746,11 @@ cmpplot(
 ```
 
 ```julia
-24.303367 seconds (77.87 M allocations: 4.959 GiB, 9.46% gc time, 3040.07%
- compilation time)
-t_tls = 3.643992699
+20.617839 seconds (78.17 M allocations: 4.970 GiB, 10.37% gc time, 3054.54% compilation time)
+t_tls = 2.974135336
 ```
 
 ![](/figures/bench_notebook_15_1.png)
-
 
 That helps a lot! 
 Note
@@ -756,41 +759,49 @@ Note
 ```
 
 ```julia
-3.5055131425453383
+4.650493629077301
 ```
 
+The total amount of time we saved from this approach is over 4x the total time C++ required! On top of performing the computations, that includes its own heap allocations and freeing, which the C++ code is still doing but our Julia tls method is avoiding at the cost of increasing the total amount of memory needed through creating task local caches.
 
-
-
-The total amount of time we saved from this approach is over 3x the total time C++ required! On top of performing the computations, that includes its own heap allocations and freeing, which the C++ code is still doing but our Julia tls method is avoiding at the cost of increasing the total amount of memory needed through creating task local caches.
-
-I'll leave further possible optimizations to the implementation for future work. One last thing we'll look at here are some LinxuPerf summaries:
+I'll leave further possible optimizations to future work. One last thing we'll look at here are some LinxuPerf summaries:
 ```julia
 using LinuxPerf
-GC.gc(); @time @pstats "cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)" begin
-  do_multithreaded_work!(expm_tls!, Bs, As, testrange)
+function perf(f::F, Bs, As, testrange) where {F}
+  GC.gc(); @time @pstats "cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)" begin
+    do_multithreaded_work!(f, Bs, As, testrange)
+  end
 end
+
+precomprange = range(0.001, stop = 6.0, length=1<<8);
+perf(expm_tls!, Bs, As, precomprange);
+perf(gccexpm!, Bs, As, precomprange);
+perf(clangexpm!, Bs, As, precomprange);
+perf(expm_tls!, Bs, As, testrange)
 ```
 
-```julia
-4.365871 seconds (49.91 M allocations: 3.133 GiB, 7.57% gc time, 14.85% c
-ompilation time)
+```
+0.249814 seconds (434.07 k allocations: 53.308 MiB, 81.57% compilation ti
+me)
+  0.019731 seconds (14.84 k allocations: 8.978 MiB)
+  0.018594 seconds (14.84 k allocations: 8.978 MiB)
+  2.886201 seconds (48.92 M allocations: 3.061 GiB, 9.13% gc time)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-╶ cpu-cycles               2.32e+11   60.0%  #  1.9 cycles per ns
-┌ instructions             2.39e+11   60.1%  #  1.0 insns per cycle
-│ branch-instructions      1.78e+10   60.1%  #  7.4% of insns
-└ branch-misses            8.26e+08   60.1%  #  4.6% of branch insns
-┌ task-clock               1.21e+11  100.0%  # 120.9 s
+╶ cpu-cycles               2.40e+11   60.0%  #  2.6 cycles per ns
+┌ instructions             2.39e+11   60.0%  #  1.0 insns per cycle
+│ branch-instructions      1.81e+10   60.0%  #  7.6% of insns
+└ branch-misses            8.27e+08   60.0%  #  4.6% of branch insns
+┌ task-clock               9.36e+10  100.0%  # 93.6 s
 │ context-switches         0.00e+00  100.0%
 │ cpu-migrations           0.00e+00  100.0%
-└ page-faults              9.80e+01  100.0%
-┌ L1-dcache-load-misses    2.05e+09   20.0%  #  2.6% of dcache loads
-│ L1-dcache-loads          7.77e+10   20.0%
-└ L1-icache-load-misses    2.03e+09   20.0%
-┌ dTLB-load-misses         2.27e+07   19.9%  #  0.0% of dTLB loads
-└ dTLB-loads               7.74e+10   19.9%
-┌ iTLB-load-misses         3.81e+07   39.9%  # 68.2% of iTLB loads
-└ iTLB-loads               5.58e+07   39.9%
+└ page-faults              7.30e+01  100.0%
+┌ L1-dcache-load-misses    1.97e+09   20.0%  #  2.5% of dcache loads
+│ L1-dcache-loads          7.79e+10   20.0%
+└ L1-icache-load-misses    2.02e+09   20.0%
+┌ dTLB-load-misses         1.67e+07   20.0%  #  0.0% of dTLB loads
+└ dTLB-loads               7.80e+10   20.0%
+┌ iTLB-load-misses         1.46e+07   40.0%  # 23.9% of iTLB loads
+└ iTLB-loads               6.12e+07   40.0%
                  aggregated from 53 threads
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -798,30 +809,27 @@ ompilation time)
 
 
 ```julia
-GC.gc(); @time @pstats "cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)" begin
-  do_multithreaded_work!(clangexpm!, Bs, As, testrange)
-end
+perf(clangexpm!, Bs, As, testrange)
 ```
 
-```julia
-1.318992 seconds (550.82 k allocations: 948.071 MiB, 16.62% compilation t
-ime: 64% of which was recompilation)
+```
+0.813010 seconds (406.52 k allocations: 938.334 MiB)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-╶ cpu-cycles               1.05e+11   60.0%  #  2.8 cycles per ns
-┌ instructions             1.17e+11   60.0%  #  1.1 insns per cycle
-│ branch-instructions      6.69e+09   60.0%  #  5.7% of insns
-└ branch-misses            8.24e+08   60.0%  # 12.3% of branch insns
-┌ task-clock               3.80e+10  100.0%  # 38.0 s
+╶ cpu-cycles               1.10e+11   59.9%  #  3.8 cycles per ns
+┌ instructions             1.15e+11   60.0%  #  1.0 insns per cycle
+│ branch-instructions      6.44e+09   60.0%  #  5.6% of insns
+└ branch-misses            7.81e+08   60.0%  # 12.1% of branch insns
+┌ task-clock               2.87e+10  100.0%  # 28.7 s
 │ context-switches         0.00e+00  100.0%
 │ cpu-migrations           0.00e+00  100.0%
-└ page-faults              9.20e+01  100.0%
-┌ L1-dcache-load-misses    1.59e+09   20.0%  #  4.8% of dcache loads
-│ L1-dcache-loads          3.29e+10   20.0%
-└ L1-icache-load-misses    2.88e+08   20.0%
-┌ dTLB-load-misses         5.73e+05   20.0%  #  0.0% of dTLB loads
-└ dTLB-loads               3.29e+10   20.0%
-┌ iTLB-load-misses         2.33e+05   39.9%  #  1.8% of iTLB loads
-└ iTLB-loads               1.33e+07   39.9%
+└ page-faults              9.40e+01  100.0%
+┌ L1-dcache-load-misses    1.59e+09   20.0%  #  4.9% of dcache loads
+│ L1-dcache-loads          3.26e+10   20.0%
+└ L1-icache-load-misses    2.92e+08   20.0%
+┌ dTLB-load-misses         4.53e+05   20.0%  #  0.0% of dTLB loads
+└ dTLB-loads               3.26e+10   20.0%
+┌ iTLB-load-misses         3.90e+05   40.0%  #  2.9% of iTLB loads
+└ iTLB-loads               1.36e+07   40.0%
                  aggregated from 36 threads
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -829,30 +837,27 @@ ime: 64% of which was recompilation)
 
 
 ```julia
-GC.gc(); @time @pstats "cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)" begin
-  do_multithreaded_work!(gccexpm!, Bs, As, testrange)
-end
+perf(gccexpm!, Bs, As, testrange)
 ```
 
-```julia
-1.387551 seconds (461.69 k allocations: 942.042 MiB, 11.61% compilation t
-ime: 87% of which was recompilation)
+```
+0.882942 seconds (406.52 k allocations: 938.334 MiB)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-╶ cpu-cycles               1.21e+11   60.0%  #  2.8 cycles per ns
-┌ instructions             1.45e+11   60.0%  #  1.2 insns per cycle
-│ branch-instructions      8.73e+09   60.0%  #  6.0% of insns
-└ branch-misses            7.50e+08   60.0%  #  8.6% of branch insns
-┌ task-clock               4.38e+10  100.0%  # 43.8 s
+╶ cpu-cycles               1.20e+11   60.0%  #  3.8 cycles per ns
+┌ instructions             1.41e+11   60.0%  #  1.2 insns per cycle
+│ branch-instructions      8.30e+09   60.0%  #  5.9% of insns
+└ branch-misses            7.24e+08   60.0%  #  8.7% of branch insns
+┌ task-clock               3.13e+10  100.0%  # 31.3 s
 │ context-switches         0.00e+00  100.0%
 │ cpu-migrations           0.00e+00  100.0%
-└ page-faults              5.00e+00  100.0%
-┌ L1-dcache-load-misses    1.70e+09   20.0%  #  3.9% of dcache loads
-│ L1-dcache-loads          4.33e+10   20.0%
-└ L1-icache-load-misses    2.67e+08   20.0%
-┌ dTLB-load-misses         5.19e+05   20.0%  #  0.0% of dTLB loads
-└ dTLB-loads               4.33e+10   20.0%
-┌ iTLB-load-misses         2.34e+05   40.0%  #  1.7% of iTLB loads
-└ iTLB-loads               1.34e+07   40.0%
+└ page-faults              0.00e+00  100.0%
+┌ L1-dcache-load-misses    1.68e+09   20.0%  #  4.0% of dcache loads
+│ L1-dcache-loads          4.19e+10   20.0%
+└ L1-icache-load-misses    2.56e+08   20.0%
+┌ dTLB-load-misses         2.64e+05   20.0%  #  0.0% of dTLB loads
+└ dTLB-loads               4.19e+10   20.0%
+┌ iTLB-load-misses         1.16e+05   39.9%  #  0.9% of iTLB loads
+└ iTLB-loads               1.31e+07   39.9%
                  aggregated from 36 threads
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -866,85 +871,16 @@ With this in mind, the next optimization to try would be [ForwardDiff#570](https
 Trying it on Julia master, I get:
 ```julia
 julia> GC.gc(); @time do_multithreaded_work!(expm_tls!, Bs, As, testrange);
-  1.662658 seconds (21.29 M allocations: 728.873 MiB, 4.92% gc time)
+  1.274884 seconds (21.29 M allocations: 728.857 MiB, 6.78% gc time)
 
 julia> GC.gc(); @time do_multithreaded_work!(clangexpm!, Bs, As, testrange);
-  1.055576 seconds (8.41 k allocations: 4.532 MiB)
+  0.788763 seconds (8.41 k allocations: 4.532 MiB)
 
 julia> GC.gc(); @time do_multithreaded_work!(gccexpm!, Bs, As, testrange);
-  1.200929 seconds (8.41 k allocations: 4.532 MiB)
-
-julia> GC.gc(); @time @pstats "cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)" begin
-         do_multithreaded_work!(expm_tls!, Bs, As, testrange)
-       end
-  1.718740 seconds (21.33 M allocations: 731.359 MiB, 4.51% gc time, 1.47% compilation time)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-╶ cpu-cycles               1.59e+11   60.0%  #  2.7 cycles per ns
-┌ instructions             1.87e+11   60.0%  #  1.2 insns per cycle
-│ branch-instructions      1.02e+10   60.0%  #  5.4% of insns
-└ branch-misses            8.47e+08   60.0%  #  8.3% of branch insns
-┌ task-clock               5.79e+10  100.0%  # 57.9 s
-│ context-switches         0.00e+00  100.0%
-│ cpu-migrations           0.00e+00  100.0%
-└ page-faults              1.00e+00  100.0%
-┌ L1-dcache-load-misses    1.98e+09   20.0%  #  3.3% of dcache loads
-│ L1-dcache-loads          6.03e+10   20.0%
-└ L1-icache-load-misses    8.28e+08   20.0%
-┌ dTLB-load-misses         2.45e+07   20.0%  #  0.0% of dTLB loads
-└ dTLB-loads               6.03e+10   20.0%
-┌ iTLB-load-misses         1.84e+07   40.0%  # 59.7% of iTLB loads
-└ iTLB-loads               3.09e+07   40.0%
-                 aggregated from 53 threads
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-julia> GC.gc(); @time @pstats "cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)" begin
-         do_multithreaded_work!(clangexpm!, Bs, As, testrange)
-       end
-  1.111501 seconds (48.01 k allocations: 7.017 MiB, 2.26% compilation time)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-╶ cpu-cycles               1.05e+11   60.0%  #  2.7 cycles per ns
-┌ instructions             1.16e+11   60.0%  #  1.1 insns per cycle
-│ branch-instructions      6.65e+09   60.0%  #  5.7% of insns
-└ branch-misses            7.99e+08   60.0%  # 12.0% of branch insns
-┌ task-clock               3.82e+10  100.0%  # 38.2 s
-│ context-switches         0.00e+00  100.0%
-│ cpu-migrations           0.00e+00  100.0%
-└ page-faults              0.00e+00  100.0%
-┌ L1-dcache-load-misses    1.58e+09   20.0%  #  4.8% of dcache loads
-│ L1-dcache-loads          3.28e+10   20.0%
-└ L1-icache-load-misses    2.78e+08   20.0%
-┌ dTLB-load-misses         2.60e+05   20.0%  #  0.0% of dTLB loads
-└ dTLB-loads               3.28e+10   20.0%
-┌ iTLB-load-misses         1.74e+05   40.0%  #  1.4% of iTLB loads
-└ iTLB-loads               1.28e+07   40.0%
-                 aggregated from 36 threads
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-julia> GC.gc(); @time @pstats "cpu-cycles,(instructions,branch-instructions,branch-misses),(task-clock,context-switches,cpu-migrations,page-faults),(L1-dcache-load-misses,L1-dcache-loads,L1-icache-load-misses),(dTLB-load-misses,dTLB-loads),(iTLB-load-misses,iTLB-loads)" begin
-         do_multithreaded_work!(gccexpm!, Bs, As, testrange)
-       end
-  1.257558 seconds (48.00 k allocations: 7.014 MiB, 2.03% compilation time)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-╶ cpu-cycles               1.20e+11   60.0%  #  2.7 cycles per ns
-┌ instructions             1.44e+11   60.0%  #  1.2 insns per cycle
-│ branch-instructions      8.69e+09   60.0%  #  6.0% of insns
-└ branch-misses            7.38e+08   60.0%  #  8.5% of branch insns
-┌ task-clock               4.35e+10  100.0%  # 43.5 s
-│ context-switches         0.00e+00  100.0%
-│ cpu-migrations           0.00e+00  100.0%
-└ page-faults              0.00e+00  100.0%
-┌ L1-dcache-load-misses    1.68e+09   20.0%  #  3.9% of dcache loads
-│ L1-dcache-loads          4.32e+10   20.0%
-└ L1-icache-load-misses    2.55e+08   20.0%
-┌ dTLB-load-misses         2.81e+05   20.0%  #  0.0% of dTLB loads
-└ dTLB-loads               4.32e+10   20.0%
-┌ iTLB-load-misses         1.22e+05   40.0%  #  1.1% of iTLB loads
-└ iTLB-loads               1.10e+07   40.0%
-                 aggregated from 36 threads
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  0.858725 seconds (8.41 k allocations: 4.532 MiB)
 ```
 
-Which is finally within 2x of GCC and Clang!
+Which is finally within 2x of the C++ code.
 
 These results were obtained using
 ```julia
@@ -971,10 +907,10 @@ Platform Info:
   Threads: 36 on 36 virtual cores
 Environment:
   LD_LIBRARY_PATH = /usr/local/lib/x86_64-unknown-linux-gnu/:/usr/local/lib
-/
-  LD_UN_PATH = /usr/local/lib/x86_64-unknown-linux-gnu/:/usr/local/lib/
+/:/usr/local/lib/x86_64-unknown-linux-gnu/:/usr/local/lib/
   JULIA_NUM_THREADS = 36
   JULIA_PATH = @.
+  LD_UN_PATH = /usr/local/lib/x86_64-unknown-linux-gnu/:/usr/local/lib/
 ```
 
 
